@@ -1,6 +1,26 @@
-streamlit
-pandas
-matplotlib
-seaborn
-scikit-learn
-altair
+# ============================================================================
+# GA Predictive Maintenance System - Python Dependencies
+# ============================================================================
+
+# Core Data Science Libraries
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Machine Learning
+scikit-learn>=1.3.0
+tensorflow>=2.13.0
+joblib>=1.3.0
+
+# Data Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+altair>=5.0.0
+
+# Web Dashboard
+streamlit>=1.25.0
+
+# Database
+# SQLite is included in Python standard library
+
+# Utilities
+python-dateutil>=2.8.2
