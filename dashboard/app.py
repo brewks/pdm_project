@@ -8,8 +8,8 @@ viewing model predictions, and tracking preventive maintenance tasks.
 The dashboard demonstrates the complete Model Integration Pipeline:
 Data → ETL → ML Models → Predictions → Dashboard Visualization
 
-Author: General Aviation PdM Team
-Date: 2025
+Author: Ndubuisi Chibuogwu
+Date: Dec 2024- July 2025
 """
 
 import streamlit as st
