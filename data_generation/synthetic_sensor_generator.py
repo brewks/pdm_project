@@ -14,8 +14,8 @@ realistic operational behavior including:
 The synthetic data is designed to stress-test the ML pipeline and validate
 the PdM system's ability to detect degradation patterns and predict failures.
 
-Author: General Aviation PdM Team
-Date: 2025
+Author: Ndubuisi Chibuogwu
+Date: Dec 2024- July 2025
 """
 
 import numpy as np
