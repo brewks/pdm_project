@@ -4,7 +4,7 @@ Database utility functions for the GA Predictive Maintenance System.
 This module provides centralized database connection and query utilities
 used across all components of the PdM system.
 
-Author: General Aviation PdM Team
+Author: Ndubuisi Chibuogwu
 Date: 2025
 """
 
