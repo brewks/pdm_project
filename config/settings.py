@@ -5,7 +5,7 @@ This module centralizes all configuration parameters, paths, and constants
 used throughout the PdM system. It eliminates hard-coded values and provides
 a single source of truth for system-wide settings.
 
-Author: General Aviation PdM Team
+Author: Ndubuisi Chibuogwu
 Date: 2025
 """
 
