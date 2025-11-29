@@ -15,7 +15,7 @@ The synthetic data is designed to stress-test the ML pipeline and validate
 the PdM system's ability to detect degradation patterns and predict failures.
 
 Author: Ndubuisi Chibuogwu
-Date: Dec 2024- July 2025
+Date: November 2025
 """
 
 import numpy as np
@@ -30,7 +30,7 @@ from config.settings import (
     SENSOR_HEALTH_THRESHOLDS,
     SAMPLING_INTERVALS,
     DEFAULT_NUM_COMPONENTS,
-    DEFAULT_NUM_RECORDS,
+    DEFAULT_NUM_RECORDS,            # variables imported from /config.settings
     DEGRADATION_RATE_RANGE,
     INITIAL_HEALTH_RANGE,
     NOISE_STABLE_PARAMS,
@@ -47,16 +47,9 @@ from config.logging_config import setup_logger
 logger = setup_logger(__name__)
 
 
-class SyntheticSensorDataGenerator:
-    """
-    Generator for synthetic sensor data with realistic degradation patterns.
-
-    This class simulates sensor readings for aircraft components with various
-    failure modes, degradation rates, and noise characteristics. The generated
-    data includes healthy components, gradually degrading components, and
-    components with accelerated failure patterns.
-    """
-
+class SyntheticSensorDataGenerator: # This class encapsulates all logic for generating aviation-like sensor data.   
+    
+    # Generator for synthetic sensor data with realistic degradation patterns.
     def __init__(
         self,
         db_path: Path,
@@ -64,19 +57,12 @@ class SyntheticSensorDataGenerator:
         num_components: int = DEFAULT_NUM_COMPONENTS,
         num_records: int = DEFAULT_NUM_RECORDS
     ):
-        """
-        Initialize the synthetic sensor data generator.
-
-        Args:
-            db_path: Path to the SQLite database
-            params: List of sensor parameters to generate. Uses TOP_SENSOR_PARAMS if None.
-            num_components: Number of aircraft components to generate data for
-            num_records: Number of sensor records per component per parameter
-        """
-        self.db_path = db_path
-        self.params = params or TOP_SENSOR_PARAMS
-        self.num_components = num_components
-        self.num_records = num_records
+        
+        # Initialize the synthetic sensor data generator.
+        self.db_path = db_path # Path to the SQLite database
+        self.params = params or TOP_SENSOR_PARAMS # List of sensor parameters to generate.
+        self.num_components = num_components # Number of aircraft components to generate data for
+        self.num_records = num_records # Number of sensor records per component per parameter
 
         # Set random seed for reproducibility
         np.random.seed(RANDOM_SEED)
@@ -88,30 +74,13 @@ class SyntheticSensorDataGenerator:
         )
 
     def _get_sensor_unit(self, param: str) -> str:
-        """
-        Get the unit of measurement for a sensor parameter.
-
-        Args:
-            param: Sensor parameter name
-
-        Returns:
-            str: Unit of measurement (e.g., 'psi', '°C', 'rpm')
-        """
+        
+        # Get the unit of measurement for a sensor parameter.
         return SENSOR_UNITS.get(param, 'psi')  # Default to psi
 
     def _get_noise_level(self, param: str) -> float:
-        """
-        Determine the noise level for a given sensor parameter.
-
-        Different sensor types have different characteristic noise levels
-        based on their operational stability.
-
-        Args:
-            param: Sensor parameter name
-
-        Returns:
-            float: Standard deviation for normal noise distribution
-        """
+       
+        # Determine the noise level for a given sensor parameter.
         if param in ['rpm', 'bus_voltage']:
             return NOISE_STABLE_PARAMS
         elif param in ['oil_press', 'hyd_press']:
@@ -121,28 +90,15 @@ class SyntheticSensorDataGenerator:
 
     def _compute_degradation_value(
         self,
-        record_index: int,
-        failure_point: int,
-        initial_factor: float,
-        degradation_rate: float,
-        param: str
+        record_index: int, # Current record number (time index)
+        failure_point: int, # Record index where accelerated degradation begins
+        initial_factor: float, # Component's initial health multiplier
+        degradation_rate: float, # Rate of degradation over time
+        param: str # Sensor parameter name
     ) -> float:
-        """
-        Compute sensor value with degradation over time.
-
-        Implements gradual degradation before failure point and accelerated
-        degradation after failure point to simulate real-world component wear.
-
-        Args:
-            record_index: Current record number (time index)
-            failure_point: Record index where accelerated degradation begins
-            initial_factor: Component's initial health multiplier
-            degradation_rate: Rate of degradation over time
-            param: Sensor parameter name
-
-        Returns:
-            float: Computed sensor value (0-100 range)
-        """
+       
+        # COMPUTE SENSOR VALUE WITH DEGRADATION OVER TIME.
+        
         # Compute base degradation value (linear decay)
         if record_index < failure_point:
             # Normal gradual degradation
@@ -182,16 +138,8 @@ class SyntheticSensorDataGenerator:
         return 0 if value >= threshold else 1
 
     def generate(self) -> None:
-        """
-        Generate synthetic sensor data and insert into database.
-
-        This method creates realistic sensor data for multiple components with
-        varying degradation patterns, failure points, and noise characteristics.
-        Data is inserted into the sensor_data table in the database.
-
-        Raises:
-            sqlite3.Error: If database insertion fails
-        """
+    
+        # Generate synthetic sensor data and insert into database.        
         logger.info("Starting synthetic sensor data generation...")
 
         try:
@@ -278,25 +226,13 @@ def generate_synthetic_data(
     num_components: int = DEFAULT_NUM_COMPONENTS,
     num_records: int = DEFAULT_NUM_RECORDS
 ) -> None:
-    """
-    Convenience function to generate synthetic sensor data.
-
-    Args:
-        db_path: Path to the SQLite database
-        params: List of sensor parameters to generate
-        num_components: Number of components to generate data for
-        num_records: Number of records per component per parameter
-
-    Example:
-        >>> from pathlib import Path
-        >>> db = Path("database/ga_maintenance.db")
-        >>> generate_synthetic_data(db, num_components=20, num_records=2000)
-    """
+  
+    # Convenience function to generate synthetic sensor data.
     generator = SyntheticSensorDataGenerator(
-        db_path=db_path,
-        params=params,
-        num_components=num_components,
-        num_records=num_records
+        db_path=db_path, # Path to the SQLite database
+        params=params, # List of sensor parameters to generate
+        num_components=num_components, # Number of components to generate data for
+        num_records=num_records # Number of records per component per parameter
     )
     generator.generate()
 
