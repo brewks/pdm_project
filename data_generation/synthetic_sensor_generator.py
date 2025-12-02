@@ -30,7 +30,7 @@ from config.settings import (
     SENSOR_HEALTH_THRESHOLDS,
     SAMPLING_INTERVALS,
     DEFAULT_NUM_COMPONENTS,
-    DEFAULT_NUM_RECORDS,            # All variables imported from /config.settings
+    DEFAULT_NUM_RECORDS,            # All parameters imported from /config.settings
     DEGRADATION_RATE_RANGE,
     INITIAL_HEALTH_RANGE,
     NOISE_STABLE_PARAMS,
@@ -48,7 +48,10 @@ logger = setup_logger(__name__)
 
 
 class SyntheticSensorDataGenerator: # This class encapsulates all logic for generating aviation-like sensor data.   
-    
+    """
+    A class to generate synthetic time-series data for a sensor, 
+    incorporating trend, seasonality, and noise remeniscent to that in aircraft sensors.
+    """
     # Generator for synthetic sensor data with realistic degradation patterns.
     def __init__(
         self,
@@ -59,8 +62,8 @@ class SyntheticSensorDataGenerator: # This class encapsulates all logic for gene
     ):
         
         # Initialize the synthetic sensor data generator.
-        self.db_path = db_path # Path to the SQLite database
-        self.params = params or TOP_SENSOR_PARAMS # List of sensor parameters to generate.
+        self.db_path = db_path # Path to SQLite database
+        self.params = params or TOP_SENSOR_PARAMS # List of sensor parameters to generate (10).
         self.num_components = num_components # Number of aircraft components to generate data for
         self.num_records = num_records # Number of sensor records per component per parameter
 
