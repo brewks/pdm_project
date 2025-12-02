@@ -18,12 +18,13 @@ Author: Ndubuisi Chibuogwu
 Date: Dec 2024 - July 2025
 """
 
-import numpy as np
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
-from pathlib import Path
-import random
+import numpy as np  # used to generate random numbers and noise
+from datetime import datetime, timedelta  # for timestamps
+from typing import List, Dict, Optional  # type hinting
+from pathlib import Path  # handles file paths
+import random  # built-in random generator
 
+# Import all project-level configuration values
 from config.settings import (
     TOP_SENSOR_PARAMS,
     SENSOR_UNITS,
@@ -40,17 +41,17 @@ from config.settings import (
     POST_FAILURE_DEGRADATION_FACTOR,
     RANDOM_SEED
 )
-from config.db_utils import get_connection
-from config.logging_config import setup_logger
+from config.db_utils import get_connection  # Reusable DB connection helper
+from config.logging_config import setup_logger  # Logging setup
 
 # Initialize logger
-logger = setup_logger(__name__)
+logger = setup_logger(__name__)  # Creates a named logger for this file
 
 
-class SyntheticSensorDataGenerator: # This class encapsulates all logic for generating aviation-like sensor data.   
+class SyntheticSensorDataGenerator:  # This class encapsulates all logic for generating aviation-like sensor data.
     """
-    A class to generate synthetic time-series data for a sensor, 
-    incorporating trend, seasonality, and noise remeniscent to that in aircraft sensors.
+    A class to generate synthetic time-series data for a sensor,
+    incorporating trend, seasonality, and noise reminiscent of aircraft sensors.
     """
     # Generator for synthetic sensor data with realistic degradation patterns.
     def __init__(
@@ -62,14 +63,14 @@ class SyntheticSensorDataGenerator: # This class encapsulates all logic for gene
     ):
         
         # Initialize the synthetic sensor data generator.
-        self.db_path = db_path # Path to SQLite database
-        self.params = params or TOP_SENSOR_PARAMS # List of sensor parameters to generate (10).
-        self.num_components = num_components # Number of aircraft components to generate data for
-        self.num_records = num_records # Number of sensor records per component per parameter
+        self.db_path = db_path  # Path to SQLite database file
+        self.params = params or TOP_SENSOR_PARAMS  # Default to configured top parameters
+        self.num_components = num_components  # How many aircraft components to simulate
+        self.num_records = num_records  # How long each component is simulated for (in datapoints)
 
         # Set random seed for reproducibility
-        np.random.seed(RANDOM_SEED)
-        random.seed(RANDOM_SEED)
+        np.random.seed(RANDOM_SEED)  # Makes results the same each run
+        random.seed(RANDOM_SEED)  # Same for Python's random
 
         logger.info(
             f"Initialized SyntheticSensorDataGenerator: "
@@ -78,44 +79,44 @@ class SyntheticSensorDataGenerator: # This class encapsulates all logic for gene
 
     def _get_sensor_unit(self, param: str) -> str:
         
-        # Get the unit of measurement for a sensor parameter.
-        return SENSOR_UNITS.get(param, 'psi')  # Default to psi
+        # Look up whether oil pressure is in psi, temp is °C, etc.
+        return SENSOR_UNITS.get(param, 'psi')  # Default to psi if missing
 
     def _get_noise_level(self, param: str) -> float:
        
-        # Determine the noise level for a given sensor parameter.
+        # Some sensors fluctuate a lot, others should stay very stable.
         if param in ['rpm', 'bus_voltage']:
-            return NOISE_STABLE_PARAMS
+            return NOISE_STABLE_PARAMS  # Very low noise
         elif param in ['oil_press', 'hyd_press']:
-            return NOISE_PRESSURE_PARAMS
+            return NOISE_PRESSURE_PARAMS  # Higher noise for pressure systems
         else:
-            return NOISE_DEFAULT
+            return NOISE_DEFAULT  # Default noise for most sensors
 
     def _compute_degradation_value(
         self,
-        record_index: int, # Current record number (time index)
-        failure_point: int, # Record index where accelerated degradation begins
-        initial_factor: float, # Component's initial health multiplier
-        degradation_rate: float, # Rate of degradation over time
-        param: str # Sensor parameter name
+        record_index: int,  # Current record number (acts as time)
+        failure_point: int,  # When the component begins failing
+        initial_factor: float,  # Starts some components more healthy than others
+        degradation_rate: float,  # How fast the sensor value deteriorates
+        param: str  # Which sensor we're simulating
     ) -> float:
        
-        # COMPUTE SENSOR VALUE WITH DEGRADATION OVER TIME.
+        # Simulate the sensor getting worse as the component ages.
         
         # Compute base degradation value (linear decay)
         if record_index < failure_point:
             # Normal gradual degradation
             base_val = max((self.num_records - record_index * degradation_rate) / self.num_records, 0)
         else:
-            # Accelerated degradation after failure point
+            # Layman: “After failure begins, the sensor drops faster.         
             base_val = max(
                 (self.num_records - record_index * degradation_rate) / self.num_records,
                 0
             ) * POST_FAILURE_DEGRADATION_FACTOR
 
         # Add parameter-specific noise
-        noise_std = self._get_noise_level(param)
-        noise = np.random.normal(0, noise_std)
+        noise_std = self._get_noise_level(param)  # Layman: “How shaky this sensor is.”
+        noise = np.random.normal(0, noise_std)  # Normal noise
 
         # Add occasional large drops for pressure sensors (simulating leaks/failures)
         if param in ['oil_press', 'hyd_press'] and np.random.rand() < SUDDEN_DROP_PROBABILITY:
@@ -123,6 +124,7 @@ class SyntheticSensorDataGenerator: # This class encapsulates all logic for gene
 
         # Apply initial health factor and noise
         value = max(base_val * initial_factor + noise, 0) * 100
+        # Layman: “Scale to a 0–100 range and make sure no negative values.”
 
         return value
 
@@ -130,35 +132,30 @@ class SyntheticSensorDataGenerator: # This class encapsulates all logic for gene
         """
         Classify sensor health based on threshold values.
 
-        Args:
-            value: Sensor reading value
-            param: Sensor parameter name
-
-        Returns:
-            int: Sensor health status (0 = healthy, 1 = unhealthy)
+        Layman: “Decide if the sensor reading is still healthy or unsafe.”
         """
-        threshold = SENSOR_HEALTH_THRESHOLDS.get(param, 20.0)
-        return 0 if value >= threshold else 1
+        threshold = SENSOR_HEALTH_THRESHOLDS.get(param, 20.0)  # Each parameter has a minimum safe reading
+        return 0 if value >= threshold else 1  # healthy = 0, unhealthy = 1
 
     def generate(self) -> None:
     
-        # Generate synthetic sensor data and insert into database.        
+        # Generate synthetic sensor data and insert into database.
         logger.info("Starting synthetic sensor data generation...")
 
         try:
-            conn = get_connection(self.db_path)
+            conn = get_connection(self.db_path)  # Connect to SQLite
             cursor = conn.cursor()
-            base_time = datetime.now()
+            base_time = datetime.now()  # Start timestamp "now"
 
             records_inserted = 0
 
             for comp_id in range(1, self.num_components + 1):
-                # Generate random tail number
+                # Give each component an aircraft ID like N54321
                 tail_number = f"N{np.random.randint(10000, 99999)}"
 
                 # Randomize component degradation characteristics
-                degradation_rate = np.random.uniform(*DEGRADATION_RATE_RANGE)
-                initial_factor = np.random.uniform(*INITIAL_HEALTH_RANGE)
+                degradation_rate = np.random.uniform(*DEGRADATION_RATE_RANGE)  # How fast it degrades
+                initial_factor = np.random.uniform(*INITIAL_HEALTH_RANGE)  # Start slightly better/worse
 
                 # Randomly determine failure point (50-100% of lifecycle)
                 failure_point = random.randint(
@@ -176,10 +173,10 @@ class SyntheticSensorDataGenerator: # This class encapsulates all logic for gene
                 for param in self.params:
                     # Get sampling interval for this parameter
                     interval_sec = SAMPLING_INTERVALS.get(param, 60)
-                    time_offset = 0
+                    time_offset = 0  # Keeps track of elapsed minutes/seconds
 
                     for i in range(self.num_records):
-                        # Compute timestamp
+                        # Simulate the sensor reading every X seconds.
                         timestamp = base_time + timedelta(seconds=time_offset)
                         time_offset += interval_sec
 
@@ -190,8 +187,8 @@ class SyntheticSensorDataGenerator: # This class encapsulates all logic for gene
                         )
 
                         # Get unit and classify health
-                        unit = self._get_sensor_unit(param)
-                        sensor_health = self._classify_sensor_health(value, param)
+                        unit = self._get_sensor_unit(param)  # psi, °C, volts, etc.
+                        sensor_health = self._classify_sensor_health(value, param)  # healthy or not
 
                         # Insert into database
                         cursor.execute("""
@@ -208,9 +205,10 @@ class SyntheticSensorDataGenerator: # This class encapsulates all logic for gene
                         records_inserted += 1
 
                 if comp_id % 10 == 0:
+                    # Layman: “Every 10 components, print progress.”
                     logger.info(f"Generated data for {comp_id}/{self.num_components} components")
 
-            conn.commit()
+            conn.commit()  # Save to DB
             conn.close()
 
             logger.info(
@@ -230,22 +228,21 @@ def generate_synthetic_data(
     num_records: int = DEFAULT_NUM_RECORDS
 ) -> None:
   
-    # Convenience function to generate synthetic sensor data.
+    # Helper function so users don’t need to create the class manually.
     generator = SyntheticSensorDataGenerator(
-        db_path=db_path, # Path to the SQLite database
-        params=params, # List of sensor parameters to generate
-        num_components=num_components, # Number of components to generate data for
-        num_records=num_records # Number of records per component per parameter
+        db_path=db_path,  # Path to the SQLite database
+        params=params,  # List of sensors to simulate
+        num_components=num_components,  # Number of components
+        num_records=num_records  # Number of records per component per parameter
     )
-    generator.generate()
+    generator.generate()  # Start generating
 
 
 if __name__ == "__main__":
     """
     Script entry point for standalone execution.
 
-    Usage:
-        python synthetic_sensor_generator.py
+    Layman: “If you run this file directly, generate synthetic data.”
     """
     from config.settings import DATABASE_PATH
 
