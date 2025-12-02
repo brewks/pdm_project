@@ -255,7 +255,7 @@ else:
 
     # Let the user filter predictions based on how confident the model was
     if "confidence" in df.columns:
-        conf_level = st.slider("Minimum Confidence Threshold", 0.0, 1.0, 0.7)
+        conf_level = st.slider("Minimum Confidence Threshold", 0.0, 1.0, 0.7) # Threshold between 0.0 and 1.0, defaulting to 0.7
         filtered_df = df[df["confidence"] >= conf_level]
         st.write(f"### Filtered Predictions (Confidence ≥ {conf_level})")
         st.dataframe(filtered_df, use_container_width=True)
