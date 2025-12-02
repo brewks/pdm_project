@@ -39,7 +39,7 @@ from tensorflow.keras.layers import Input, LSTM, Dense
 from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt
 
-# Local imports
+# Project settings and paths
 from config.settings import (
     DATABASE_PATH,
     TOP_SENSOR_PARAMS,
@@ -56,10 +56,11 @@ from config.settings import (
     RF_MODEL_PATH,
     LSTM_MODEL_PATH
 )
+# Database helpers and logging
 from config.db_utils import execute_query, execute_many, execute_write
 from config.logging_config import setup_logger
 
-# Initialize logger
+# Create logger for this module
 logger = setup_logger(__name__)
 
 
@@ -69,13 +70,7 @@ logger = setup_logger(__name__)
 
 def extract_sensor_data() -> pd.DataFrame:
     """
-    Extract all sensor data from the database.
-
-    Returns:
-        pd.DataFrame: Sensor data with columns: component_id, timestamp, parameter, value
-
-    Raises:
-        Exception: If data extraction fails
+    Pull all sensor data from the database.
     """
     logger.info("Extracting sensor data from database...")
 
@@ -88,10 +83,7 @@ def extract_sensor_data() -> pd.DataFrame:
 
 def extract_components_rul() -> pd.DataFrame:
     """
-    Extract component IDs and their Remaining Useful Life (RUL) values.
-
-    Returns:
-        pd.DataFrame: Components with component_id and remaining_useful_life columns
+    Pull component IDs and their Remaining Useful Life (RUL) values.
     """
     logger.info("Extracting component RUL data...")
 
@@ -108,53 +100,40 @@ def extract_components_rul() -> pd.DataFrame:
 
 def clean_sensor_data(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean and validate sensor data.
-
-    Operations:
-    - Parse timestamps
-    - Remove rows with invalid timestamps
-    - Filter for top sensor parameters
-    - Remove duplicates
-
-    Args:
-        df: Raw sensor data
-
-    Returns:
-        pd.DataFrame: Cleaned sensor data
+    Basic cleaning of the raw sensor data:
+    - parse timestamps
+    - keep only the sensors we care about
+    - remove duplicate readings per (component, time, parameter)
     """
     logger.info("Cleaning sensor data...")
 
     initial_count = len(df)
 
-    # Parse and validate timestamps
+    # Convert timestamp column to real datetime, drop rows that fail conversion
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     df = df.dropna(subset=['timestamp'])
 
-    # Filter for top parameters
+    # Keep only the main sensor channels used in the models
     df = df[df['parameter'].isin(TOP_SENSOR_PARAMS)]
 
-    # Remove duplicates
+    # Remove any repeated rows for the same component / time / sensor
     df = df.drop_duplicates(subset=['component_id', 'timestamp', 'parameter'])
 
     final_count = len(df)
-    logger.info(f"Cleaned sensor data: {initial_count:,} → {final_count:,} records "
-                f"({initial_count - final_count:,} removed)")
+    logger.info(
+        f"Cleaned sensor data: {initial_count:,} → {final_count:,} records "
+        f"({initial_count - final_count:,} removed)"
+    )
 
     return df
 
 
 def pivot_sensor_data(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Pivot sensor data from long to wide format.
+    Turn the data from long format into wide format.
 
-    Transforms data so each row represents a (component_id, timestamp) pair
-    with columns for each sensor parameter.
-
-    Args:
-        df: Cleaned sensor data in long format
-
-    Returns:
-        pd.DataFrame: Pivoted data with one column per sensor parameter
+    After pivoting, each row = one (component_id, timestamp)
+    and each column = a sensor parameter (oil_press, rpm, etc.).
     """
     logger.info("Pivoting sensor data to wide format...")
 
@@ -164,11 +143,11 @@ def pivot_sensor_data(df: pd.DataFrame) -> pd.DataFrame:
         values='value'
     ).sort_index().reset_index()
 
-    # Fill missing values (forward fill then backward fill)
+    # Fill missing values by carrying last known value forward, then backward
     pivoted.ffill(inplace=True)
     pivoted.bfill(inplace=True)
 
-    # Drop rows with any remaining NaN values in sensor columns
+    # For safety, drop rows where any of the main sensors are still NaN
     pivoted = pivoted.dropna(subset=TOP_SENSOR_PARAMS)
 
     logger.info(f"Pivoted data shape: {pivoted.shape}")
@@ -181,14 +160,10 @@ def pivot_sensor_data(df: pd.DataFrame) -> pd.DataFrame:
 
 def normalize_features(df: pd.DataFrame, feature_cols: List[str]) -> Tuple[pd.DataFrame, MinMaxScaler]:
     """
-    Normalize sensor features to [0, 1] range using MinMaxScaler.
+    Scale the sensor columns to the [0, 1] range.
 
-    Args:
-        df: DataFrame containing features
-        feature_cols: List of column names to normalize
-
-    Returns:
-        Tuple[pd.DataFrame, MinMaxScaler]: Normalized DataFrame and fitted scaler
+    This keeps all sensors on a similar scale so the LSTM doesn't get dominated
+    by one feature with larger numeric values.
     """
     logger.info("Normalizing sensor features...")
 
@@ -205,25 +180,14 @@ def create_sequences(
     seq_length: int
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Create time-series sequences for LSTM training.
+    Build sliding windows for LSTM training.
 
-    Each sequence consists of seq_length consecutive timesteps of sensor readings
-    for a single component. The target is the component's RUL.
-
-    Args:
-        pivoted_df: Pivoted sensor data with normalized features
-        components_df: Component RUL data
-        seq_length: Length of each sequence (number of timesteps)
-
-    Returns:
-        Tuple containing:
-        - x_seq: 3D array of shape (num_sequences, seq_length, num_features)
-        - y_seq: 1D array of normalized RUL values
-        - comp_ids: 1D array of component IDs for each sequence
+    For each component, we take 'seq_length' consecutive rows and treat that
+    as one sequence. The target for that sequence is the component's RUL.
     """
     logger.info(f"Creating sequences with length {seq_length}...")
 
-    # Determine max RUL for normalization
+    # Use max RUL to normalize targets into [0, 1]
     y_max = components_df['remaining_useful_life'].dropna().max()
     if pd.isna(y_max) or y_max == 0:
         y_max = 1.0
@@ -233,32 +197,32 @@ def create_sequences(
     y_seq = []
     comp_ids = []
 
-    # Generate sequences for each component
+    # Go component by component
     for comp_id in pivoted_df['component_id'].unique():
         comp_data = pivoted_df[pivoted_df['component_id'] == comp_id].sort_values('timestamp')
         rul_val = components_df.loc[
             components_df['component_id'] == comp_id, 'remaining_useful_life'
         ].values
 
-        # Skip if no RUL value, insufficient data, or invalid RUL
+        # Skip components with no RUL or not enough history
         if (rul_val.size == 0 or
                 len(comp_data) < seq_length or
                 pd.isna(rul_val[0])):
             continue
 
-        # Create all possible sequences for this component
+        # Slide a window of length seq_length across this component's time series
         for i in range(len(comp_data) - seq_length + 1):
             sequence = comp_data[TOP_SENSOR_PARAMS].iloc[i:i + seq_length].values
             x_seq.append(sequence)
-            y_seq.append(rul_val[0])
+            y_seq.append(rul_val[0])  # same RUL label for all windows of that component
             comp_ids.append(comp_id)
 
-    # Convert to numpy arrays
+    # Convert to numpy arrays for model training
     x_seq = np.array(x_seq)
-    y_seq = np.array(y_seq) / y_max  # Normalize RUL
+    y_seq = np.array(y_seq) / y_max  # normalize RUL
     comp_ids = np.array(comp_ids)
 
-    # Remove sequences with NaN values
+    # Drop any sequences that still contain NaNs
     valid_mask = ~np.isnan(x_seq).any(axis=(1, 2)) & ~np.isnan(y_seq)
     x_seq = x_seq[valid_mask]
     y_seq = y_seq[valid_mask]
@@ -281,44 +245,35 @@ def train_random_forest(
     y_max: float
 ) -> Tuple[RandomForestRegressor, Dict[str, float]]:
     """
-    Train Random Forest model for RUL prediction.
+    Train a Random Forest baseline.
 
-    Uses the last timestep of each sequence as features.
-
-    Args:
-        x_train: Training sequences (3D array)
-        y_train: Training targets (normalized RUL)
-        x_test: Test sequences (3D array)
-        y_test: Test targets (normalized RUL)
-        y_max: Maximum RUL value for denormalization
-
-    Returns:
-        Tuple containing trained model and metrics dictionary
+    For Random Forest we don't feed the full time window, we only take the
+    last timestep of each sequence as the feature vector.
     """
     logger.info("Training Random Forest model...")
 
-    # Extract last timestep from sequences
+    # Take only the last time step from each sequence
     x_rf_train = x_train[:, -1, :]
     x_rf_test = x_test[:, -1, :]
 
-    # Remove NaN values from training data
+    # Drop any rows where the target is NaN
     nan_mask = ~np.isnan(y_train)
     x_rf_train = x_rf_train[nan_mask]
     y_train_clean = y_train[nan_mask]
 
-    # Train model
+    # Set up and train the model
     rf = RandomForestRegressor(
         n_estimators=RF_N_ESTIMATORS,
         random_state=RF_RANDOM_STATE,
-        n_jobs=-1
+        n_jobs=-1  # use all cores
     )
     rf.fit(x_rf_train, y_train_clean)
 
-    # Make predictions (denormalize)
+    # Predict and bring RUL back to original scale
     y_pred = rf.predict(x_rf_test) * y_max
     y_true = y_test * y_max
 
-    # Calculate metrics
+    # Calculate metrics in real RUL hours
     mae = mean_absolute_error(y_true, y_pred)
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
     r2 = r2_score(y_true, y_pred)
@@ -331,7 +286,7 @@ def train_random_forest(
 
     logger.info(f"Random Forest - MAE: {mae:.2f}, RMSE: {rmse:.2f}, R²: {r2:.4f}")
 
-    # Save model
+    # Store the trained model to disk
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(rf, RF_MODEL_PATH)
     logger.info(f"Random Forest model saved to {RF_MODEL_PATH}")
@@ -347,23 +302,11 @@ def train_lstm(
     y_max: float
 ) -> Tuple[Sequential, Dict[str, float]]:
     """
-    Train LSTM model for RUL prediction.
-
-    Uses full time-series sequences.
-
-    Args:
-        x_train: Training sequences (3D array)
-        y_train: Training targets (normalized RUL)
-        x_test: Test sequences (3D array)
-        y_test: Test targets (normalized RUL)
-        y_max: Maximum RUL value for denormalization
-
-    Returns:
-        Tuple containing trained model and metrics dictionary
+    Train the LSTM model on full sequences.
     """
     logger.info("Training LSTM model...")
 
-    # Build LSTM architecture
+    # Simple one-layer LSTM followed by a dense output
     model = Sequential([
         Input(shape=(LSTM_SEQUENCE_LENGTH, len(TOP_SENSOR_PARAMS))),
         LSTM(LSTM_UNITS),
@@ -372,10 +315,12 @@ def train_lstm(
 
     model.compile(optimizer=Adam(LSTM_LEARNING_RATE), loss='mse')
 
-    logger.info(f"LSTM architecture: {LSTM_UNITS} units, {LSTM_EPOCHS} epochs, "
-                f"batch size {LSTM_BATCH_SIZE}")
+    logger.info(
+        f"LSTM architecture: {LSTM_UNITS} units, {LSTM_EPOCHS} epochs, "
+        f"batch size {LSTM_BATCH_SIZE}"
+    )
 
-    # Train model
+    # Train and keep track of train/validation losses
     history = model.fit(
         x_train, y_train,
         epochs=LSTM_EPOCHS,
@@ -384,11 +329,11 @@ def train_lstm(
         verbose=1
     )
 
-    # Make predictions (denormalize)
+    # Predict and denormalize back to hours
     y_pred = model.predict(x_test).flatten() * y_max
     y_true = y_test * y_max
 
-    # Calculate metrics
+    # Metrics in real units
     mae = mean_absolute_error(y_true, y_pred)
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
     r2 = r2_score(y_true, y_pred)
@@ -403,7 +348,7 @@ def train_lstm(
 
     logger.info(f"LSTM - MAE: {mae:.2f}, RMSE: {rmse:.2f}, R²: {r2:.4f}")
 
-    # Save model
+    # Save Keras model
     model.save(str(LSTM_MODEL_PATH))
     logger.info(f"LSTM model saved to {LSTM_MODEL_PATH}")
 
@@ -422,24 +367,19 @@ def log_predictions_to_database(
     time_horizon: str = "100h"
 ) -> None:
     """
-    Log model predictions to the database.
+    Write model predictions into the component_predictions table.
 
-    Args:
-        component_ids: Array of component IDs
-        predictions: Array of predicted RUL values
-        model_id: ID of the model in predictive_models table
-        confidence: Prediction confidence level
-        time_horizon: Time horizon for the prediction
+    This makes it easy for the dashboard to show the latest RUL for each component.
     """
     logger.info(f"Logging {len(predictions)} predictions to database...")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Clear existing predictions for this model
+    # Clear any previous predictions for this model id
     delete_query = "DELETE FROM component_predictions WHERE model_id = ?"
     execute_write(delete_query, (model_id,))
 
-    # Prepare records
+    # Build the rows we want to insert
     records = [
         (
             int(cid),
@@ -454,7 +394,7 @@ def log_predictions_to_database(
         for cid, pred in zip(component_ids, predictions)
     ]
 
-    # Insert predictions
+    # Bulk insert into the DB
     insert_query = """
         INSERT INTO component_predictions (
             component_id, model_id, prediction_type, predicted_value,
@@ -477,13 +417,7 @@ def plot_predictions(
     y_max: float
 ) -> None:
     """
-    Create scatter plots comparing actual vs predicted RUL.
-
-    Args:
-        y_true: Actual RUL values
-        y_rf: Random Forest predictions
-        y_lstm: LSTM predictions
-        y_max: Maximum RUL value for plot limits
+    Plot actual vs predicted RUL for both models on one chart.
     """
     fig, ax = plt.subplots(figsize=(10, 5))
 
@@ -509,31 +443,22 @@ def plot_predictions(
 
 def main():
     """
-    Execute the complete ML training pipeline.
-
-    Steps:
-    1. Extract and clean data
-    2. Create sequences
-    3. Train Random Forest
-    4. Train LSTM
-    5. Evaluate and compare
-    6. Log predictions
-    7. Generate visualizations
+    Run the full training pipeline end to end.
     """
     logger.info("=" * 80)
     logger.info("Starting ML Model Training Pipeline")
     logger.info("=" * 80)
 
-    # Step 1: Extract data
+    # 1) Pull data from the database
     sensor_df = extract_sensor_data()
     components_df = extract_components_rul()
 
-    # Step 2: Clean and prepare data
+    # 2) Clean and reshape it
     sensor_df = clean_sensor_data(sensor_df)
     pivoted_df = pivot_sensor_data(sensor_df)
     pivoted_df, scaler = normalize_features(pivoted_df, TOP_SENSOR_PARAMS)
 
-    # Step 3: Create sequences
+    # 3) Turn time series into fixed-length sequences
     x_seq, y_seq, comp_ids = create_sequences(
         pivoted_df, components_df, LSTM_SEQUENCE_LENGTH
     )
@@ -542,7 +467,7 @@ def main():
         logger.error("No valid sequences generated. Cannot train models.")
         return
 
-    # Step 4: Train/test split
+    # 4) Train/test split at the sequence level
     x_train, x_test, y_train, y_test, comp_train, comp_test = train_test_split(
         x_seq, y_seq, comp_ids,
         test_size=TRAIN_TEST_SPLIT,
@@ -552,21 +477,21 @@ def main():
     logger.info(f"Training set: {len(x_train):,} sequences")
     logger.info(f"Test set: {len(x_test):,} sequences")
 
-    # Determine y_max for denormalization
+    # Use max RUL to undo normalization later
     y_max = components_df['remaining_useful_life'].dropna().max()
 
-    # Step 5: Train models
+    # 5) Train both models
     rf_model, rf_metrics = train_random_forest(x_train, y_train, x_test, y_test, y_max)
     lstm_model, lstm_metrics = train_lstm(x_train, y_train, x_test, y_test, y_max)
 
-    # Step 6: Generate predictions for test set
+    # 6) Get predictions on the test set
     y_rf_pred = rf_model.predict(x_test[:, -1, :]) * y_max
     y_lstm_pred = lstm_model.predict(x_test).flatten() * y_max
 
-    # Step 7: Log predictions to database
+    # 7) Save LSTM predictions back into the DB for the dashboard to consume
     log_predictions_to_database(comp_test, y_lstm_pred)
 
-    # Step 8: Visualize results
+    # 8) Visualize side-by-side performance of RF vs LSTM
     plot_predictions(y_test * y_max, y_rf_pred, y_lstm_pred, y_max)
 
     logger.info("=" * 80)
