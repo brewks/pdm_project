@@ -1,4 +1,4 @@
-"""
+een"""
 ML Model Training Pipeline for GA Predictive Maintenance System.
 
 This module implements the complete training pipeline for both Random Forest and
@@ -160,7 +160,7 @@ def pivot_sensor_data(df: pd.DataFrame) -> pd.DataFrame:
 
 def normalize_features(df: pd.DataFrame, feature_cols: List[str]) -> Tuple[pd.DataFrame, MinMaxScaler]:
     """
-    Scale the sensor columns to the [0, 1] range.
+    Scale the sensor columns between [0, 1] range.
 
     This keeps all sensors on a similar scale so the LSTM doesn't get dominated
     by one feature with larger numeric values.
@@ -178,7 +178,7 @@ def create_sequences(
     pivoted_df: pd.DataFrame,
     components_df: pd.DataFrame,
     seq_length: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]: 
     """
     Build sliding windows for LSTM training.
 
@@ -265,7 +265,7 @@ def train_random_forest(
     rf = RandomForestRegressor(
         n_estimators=RF_N_ESTIMATORS,
         random_state=RF_RANDOM_STATE,
-        n_jobs=-1  # use all cores
+        n_jobs=-1  # use all available CPU cores for parallel processing to speed up training
     )
     rf.fit(x_rf_train, y_train_clean)
 
