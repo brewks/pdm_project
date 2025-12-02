@@ -6,7 +6,7 @@ used throughout the PdM system. It eliminates hard-coded values and provides
 a single source of truth for system-wide settings.
 
 Author: Ndubuisi Chibuogwu
-Date: 2025
+Date: Dec 2024 - July 2025
 """
 
 import os
@@ -274,21 +274,13 @@ def get_db_path() -> str:
 
 
 def get_model_dir() -> str:
-    """
-    Get the model directory path as a string.
-
-    Returns:
-        str: Absolute path to the models directory
-    """
+    
+    # Get the model directory path as a string.   
     return str(MODEL_DIR.absolute())
 
 
 def validate_paths() -> bool:
-    """
-    Validate that all critical paths exist and are accessible.
 
-    Returns:
-        bool: True if all paths are valid, False otherwise
-    """
+    # Validate that all critical paths exist and are accessible.    
     critical_paths = [DATABASE_DIR, MODEL_DIR]
-    return all(path.exists() and path.is_dir() for path in critical_paths)
+    return all(path.exists() and path.is_dir() for path in critical_paths)    # bool: True if all paths are valid, False otherwise
