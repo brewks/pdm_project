@@ -45,7 +45,7 @@ def generate_degrading_sensor_data(
         tail_number = f"N{np.random.randint(10000, 99999)}"
 
         # Decide at which record index this component starts to degrade faster
-        failure_point = random.randint(int(num_records * 0.5), num_records)
+        failure_point = random.randint(int(num_records * 0.5), num_records)   # failure_point could be 50, 62, 88, 100, etc.
 
         # For each sensor parameter we want to simulate
         for param in top_params:
@@ -57,7 +57,7 @@ def generate_degrading_sensor_data(
             for i in range(num_records):
                 # Before failure: smooth, slow degradation
                 if i < failure_point:
-                    base_val = max((num_records - i) / num_records, 0)
+                    base_val = max((num_records - i) / num_records, 0) # Apply a base value calculation only for iterations before the designated failure point
                 # After failure: artificially speed up the drop
                 else:
                     base_val = max((num_records - i) / num_records, 0) * 0.5
@@ -104,3 +104,4 @@ def generate_degrading_sensor_data(
     conn.commit()
     conn.close()
     print("✅ Inserted synthetic sensor records with degradation, failures, and variable sampling rates.")
+
