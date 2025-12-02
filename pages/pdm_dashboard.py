@@ -8,18 +8,20 @@ import time
 # === CONFIG ===
 DB_PATH = "ga_maintenance.db"
 
-# Dark plotting theme
+# Use a dark theme for the charts so everything matches the dashboard look
 plt.style.use("dark_background")
 sns.set_theme(style="whitegrid")
 
 # === FUNCTIONS ===
 def load_data(query):
+    """Simple helper so I don’t repeat connection logic everywhere."""
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql_query(query, conn)
     conn.close()
     return df
 
 def plot_rul_bar(df):
+    """Quick bar chart to see RUL side-by-side for components."""
     fig, ax = plt.subplots(figsize=(10, 5))
     sns.barplot(
         data=df,
@@ -35,6 +37,7 @@ def plot_rul_bar(df):
     st.pyplot(fig)
 
 def plot_confidence_rul(df):
+    """Scatter plot where bubble size and color give a feel for confidence."""
     fig, ax = plt.subplots(figsize=(10, 5))
     sns.scatterplot(
         data=df,
@@ -51,6 +54,7 @@ def plot_confidence_rul(df):
     st.pyplot(fig)
 
 def plot_rul_trend(df):
+    """If we have timestamps, show how predictions move over time."""
     if "prediction_time" in df.columns:
         df["prediction_time"] = pd.to_datetime(df["prediction_time"], errors="coerce")
         fig, ax = plt.subplots(figsize=(10, 5))
@@ -66,10 +70,11 @@ def plot_rul_trend(df):
         plt.xticks(rotation=45)
         st.pyplot(fig)
 
-# === APP LAYOUT ===
+# === PAGE CONFIG ===
 st.set_page_config(page_title="GA PdM Dashboard", layout="wide")
 
-# === PREMIUM MODERN DARK THEME ===
+# === CUSTOM MODERN DARK THEME ===
+# CSS block to give the dashboard a polished “product” look
 st.markdown(
     """
 <style>
@@ -83,20 +88,20 @@ st.markdown(
     --hover-glow: rgba(59, 130, 246, 0.25);
 }
 
-/* App background */
+/* Overall background */
 .stApp {
     background: radial-gradient(circle at top, #0a0f24 0%, #020617 70%);
     color: var(--text-main);
     font-family: 'Segoe UI', sans-serif;
 }
 
-/* Main content container */
+/* Layout spacing */
 .block-container {
     padding-top: 1.5rem;
     padding-bottom: 2rem;
 }
 
-/* Sidebar */
+/* Sidebar styling */
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #020617 0%, #0b1228 100%);
     color: var(--text-main);
@@ -104,7 +109,7 @@ section[data-testid="stSidebar"] {
     box-shadow: 4px 0 25px rgba(0, 0, 0, 0.75);
 }
 
-/* Sidebar elements */
+/* Sidebar widgets */
 section[data-testid="stSidebar"] .stSlider,
 section[data-testid="stSidebar"] .stRadio {
     padding: 12px 14px 10px 14px;
@@ -115,13 +120,12 @@ section[data-testid="stSidebar"] .stRadio {
     backdrop-filter: blur(4px);
 }
 
-/* Sidebar labels */
 section[data-testid="stSidebar"] label {
     color: var(--text-main);
     font-weight: 600;
 }
 
-/* Header */
+/* Title styling */
 .dashboard-title {
     font-size: 32px;
     font-weight: 700;
@@ -133,7 +137,7 @@ section[data-testid="stSidebar"] label {
     color: var(--text-soft);
 }
 
-/* Cards */
+/* Card containers for consistency */
 .main-card {
     background: var(--card-bg);
     border-radius: 20px;
@@ -144,13 +148,14 @@ section[data-testid="stSidebar"] label {
     transition: 0.25s ease-in-out;
 }
 
+/* Hover glow so cards feel clickable */
 .main-card:hover {
     border: 1px solid rgba(59, 130, 246, 0.5);
     box-shadow: 0 35px 65px rgba(0, 0, 0, 0.85),
                 0 0 20px var(--hover-glow);
 }
 
-/* Dataframe background fix */
+/* Keep DataFrame backgrounds transparent so it blends into the theme */
 .stDataFrame {
     background: transparent !important;
 }
@@ -163,7 +168,9 @@ section[data-testid="stSidebar"] label {
 # === HEADER ===
 col1, col2 = st.columns([1, 10])
 with col1:
+    # Logo so the dashboard looks like a real product
     st.image("logo.png", width=80)
+
 with col2:
     st.markdown(
         '<div class="dashboard-title">General Aviation Predictive Maintenance Dashboard</div>',
@@ -176,8 +183,10 @@ st.markdown(
 )
 
 # === SIDEBAR CONTROLS ===
+# Auto-refresh lets the dashboard behave more like a monitoring tool
 refresh_interval = st.sidebar.slider("Auto-refresh (seconds)", 0, 60, 10)
 
+# User chooses what type of information they want to see
 view_choice = st.sidebar.radio(
     "Select View",
     [
@@ -188,7 +197,7 @@ view_choice = st.sidebar.radio(
     ],
 )
 
-# === LOAD DATA ===
+# === LOAD DATA BASED ON VIEW ===
 if view_choice == "Components Needing Attention":
     df = load_data("SELECT * FROM components_needing_attention;")
 elif view_choice == "Dashboard Snapshot":
@@ -196,11 +205,12 @@ elif view_choice == "Dashboard Snapshot":
 elif view_choice == "Engine Health Overview":
     df = load_data("SELECT * FROM engine_health_view;")
 else:
+    # For predictions we just grab the latest batch
     df = load_data(
         "SELECT * FROM component_predictions ORDER BY prediction_time DESC LIMIT 100;"
     )
 
-# === DISPLAY DATA ===
+# === SECTION HEADING ===
 st.markdown(
     f"""
 <div class="main-card">
@@ -215,11 +225,12 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# === DISPLAY DATA ===
 st.markdown('<div class="main-card" style="margin-top:12px;">', unsafe_allow_html=True)
 st.dataframe(df, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# === CHARTS & LOGIC ===
+# === CHARTS AND ADDITIONAL LOGIC ===
 if df.empty:
     st.warning("⚠ No data available for this view.")
 else:
@@ -234,6 +245,7 @@ else:
         st.write("### Time-Series RUL Trends")
         plot_rul_trend(df)
 
+    # Simple alert logic if the model flags high-risk items
     if "confidence" in df.columns and "prediction_type" in df.columns:
         critical_alerts = df[
             (df["confidence"] > 0.9) & (df["prediction_type"] == "failure")
@@ -241,12 +253,14 @@ else:
         if not critical_alerts.empty:
             st.error(f"🚨 {len(critical_alerts)} CRITICAL failure predictions detected!")
 
+    # Let the user filter predictions based on how confident the model was
     if "confidence" in df.columns:
         conf_level = st.slider("Minimum Confidence Threshold", 0.0, 1.0, 0.7)
         filtered_df = df[df["confidence"] >= conf_level]
         st.write(f"### Filtered Predictions (Confidence ≥ {conf_level})")
         st.dataframe(filtered_df, use_container_width=True)
 
+        # Quick export option
         if not filtered_df.empty:
             st.download_button(
                 "⬇️ Download Filtered Data",
@@ -256,6 +270,7 @@ else:
             )
 
 # === AUTO-REFRESH ===
+# Keeps the dashboard active without needing manual refresh
 if refresh_interval > 0:
     st.info(f"⏳ Auto-refreshing every {refresh_interval} seconds...")
     time.sleep(refresh_interval)
