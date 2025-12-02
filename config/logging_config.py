@@ -4,8 +4,8 @@ Logging configuration for the GA Predictive Maintenance System.
 This module sets up centralized logging for all components of the PdM system,
 replacing scattered print statements with structured logging.
 
-Author: General Aviation PdM Team
-Date: 2025
+Author: Ndubuisi Chibuogwu
+Date: Dec 2024 - July 2025
 """
 
 import logging
@@ -69,16 +69,9 @@ def setup_logger(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """
-    Get an existing logger or create a new one with default configuration.
-
-    Args:
-        name: Name of the logger
-
-    Returns:
-        logging.Logger: Logger instance
-    """
-    logger = logging.getLogger(name)
+   
+    # Get an existing logger or create a new one with default configuration.   
+    logger = logging.getLogger(name)  # name: Name of the logger
     if not logger.hasHandlers():
         return setup_logger(name)
-    return logger
+    return logger  # logging.Logger: Logger instance
