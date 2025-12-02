@@ -15,7 +15,7 @@ The synthetic data is designed to stress-test the ML pipeline and validate
 the PdM system's ability to detect degradation patterns and predict failures.
 
 Author: Ndubuisi Chibuogwu
-Date: November 2025
+Date: Dec 2024 - July 2025
 """
 
 import numpy as np
@@ -30,7 +30,7 @@ from config.settings import (
     SENSOR_HEALTH_THRESHOLDS,
     SAMPLING_INTERVALS,
     DEFAULT_NUM_COMPONENTS,
-    DEFAULT_NUM_RECORDS,            # variables imported from /config.settings
+    DEFAULT_NUM_RECORDS,            # All variables imported from /config.settings
     DEGRADATION_RATE_RANGE,
     INITIAL_HEALTH_RANGE,
     NOISE_STABLE_PARAMS,
