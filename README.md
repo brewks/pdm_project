@@ -97,7 +97,7 @@ This project was developed for technical interviews at aerospace companies (e.g.
 - **Maintenance Logs**: Historical maintenance events
 - **Predictions**: Model outputs with confidence, time horizons
 - **FMEA**: Severity, Occurrence, Detection ratings → RPN
-- **Preventive Tasks**: FAA AC 43-12C mapped maintenance actions
+- **Preventive Tasks**: FAA AC 43-12A mapped maintenance actions
 - **Views**: Precomputed analytics (components_needing_attention, engine_health_view)
 - **Triggers**: Auto-calculate RPN, generate alerts, normalize dates
 
