@@ -115,7 +115,7 @@ This project was developed for technical interviews at aerospace companies (e.g.
 - Traceability from sensor anomaly → failure mode → maintenance task
 
 ### 5. FAA Compliance
-- Preventive tasks aligned with AC 43-12C
+- Preventive tasks aligned with AC 43-12A
 - Pilot-allowed vs. A&P-required task classification
 - Component failure modes linked to regulatory guidance
 
@@ -309,7 +309,7 @@ python ml/train_models.py
 - Custom JSON validator
 
 #### Preventive Tasks (`dashboard/pages/due_preventive_tasks.py`)
-- FAA AC 43-12C aligned task list
+- FAA AC 43-12A aligned task list
 - Filter by system and tail number
 - Task breakdown by system (bar chart)
 - CSV export
@@ -391,7 +391,7 @@ HIGH_CONFIDENCE_THRESHOLD = 0.95  # Stricter alert threshold
 - `predictive_models`: Model metadata, performance metrics JSON
 - `component_predictions`: RUL predictions with confidence, time horizons
 - `fmea_ratings`: Severity, Occurrence, Detection per failure mode
-- `preventive_tasks`: FAA AC 43-12C maintenance task library
+- `preventive_tasks`: FAA AC 43-12A maintenance task library
 - `pdm_task_mapping`: Links failure modes → preventive tasks
 
 ### Key Views
@@ -413,7 +413,7 @@ HIGH_CONFIDENCE_THRESHOLD = 0.95  # Stricter alert threshold
 Advisory Circular 43-12C provides guidance on preventive maintenance tasks that pilots can perform versus those requiring A&P certification.
 
 ### Implementation
-1. **Task Library**: `preventive_tasks` table contains AC 43-12C tasks
+1. **Task Library**: `preventive_tasks` table contains AC 43-12A tasks
 2. **Pilot-Allowed Flag**: Boolean field indicating pilot eligibility
 3. **A&P Required**: Tasks requiring certified mechanic
 4. **Failure Mode Mapping**: `pdm_task_mapping` links predictions to tasks
@@ -539,7 +539,7 @@ This project is provided as-is for educational and interview purposes.
 
 ## Acknowledgments
 
-- **FAA AC 43-12C**: Preventive maintenance guidance
+- **FAA AC 43-12A**: Preventive maintenance guidance
 - **FMEA Best Practices**: Automotive and aerospace FMEA standards
 - **Airbus Interview Framework**: Model Integration, Data Engineering, Best Practices, Traceability
 
