@@ -531,9 +531,9 @@ This project is provided as-is for educational and interview purposes.
 
 ## Contact
 
-**Author**: Ndubuisi O. Chibuogwu
-**GitHub**: https://github.com/brewks/ga_maintenance
-**Purpose**: General Aviation Use & Airbus Data Science Engineer Technical Interview
+- **Author**: Ndubuisi O. Chibuogwu
+- **GitHub**: https://github.com/brewks/ga_maintenance
+- **Purpose**: General Aviation Use & Airbus Data Science Engineer Technical Interview
 
 ---
 
