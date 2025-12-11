@@ -531,9 +531,9 @@ This project is provided as-is for educational and interview purposes.
 
 ## Contact
 
-**Author**: General Aviation PdM Team
+**Author**: Ndubuisi O. Chibuogwu
 **GitHub**: https://github.com/brewks/ga_maintenance
-**Purpose**: Airbus Data Science Engineer Technical Interview
+**Purpose**: General Aviation Use & Airbus Data Science Engineer Technical Interview
 
 ---
 
