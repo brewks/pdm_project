@@ -1,6 +1,6 @@
 # General Aviation Predictive Maintenance System
 
-A comprehensive end-to-end predictive maintenance (PdM) system for General Aviation, featuring synthetic data generation, machine learning models (Random Forest + LSTM), FMEA/RPN integration, FAA AC 43-12C compliance, and interactive dashboards.
+A comprehensive end-to-end predictive maintenance (PdM) system for General Aviation, featuring synthetic data generation, machine learning models (Random Forest + LSTM), FMEA/RPN integration, FAA AC 43-12A compliance, and interactive dashboards.
 
 ---
 
