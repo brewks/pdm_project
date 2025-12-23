@@ -345,7 +345,7 @@ This project directly addresses the four evaluation buckets for aerospace data s
 - **FMEA integration**: Severity, Occurrence, Detection → RPN → Alerts
 - **Calibration tracking**: `sensor_calibration` and `sensor_health_metrics` tables
 - **Model versioning**: `predictive_models` table with training date, data snapshot
-- **FAA compliance**: Preventive tasks mapped to AC 43-12C references
+- **FAA compliance**: Preventive tasks mapped to AC 43-12A references
 - **Audit trail**: Maintenance logs, prediction timestamps, confidence levels
 
 ---
