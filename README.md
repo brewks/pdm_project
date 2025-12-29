@@ -27,7 +27,7 @@ This PdM system demonstrates a production-ready implementation of predictive mai
 - **SQLite database** with comprehensive schema (40+ tables, views, triggers)
 - **ML pipeline** featuring Random Forest and LSTM models for RUL prediction
 - **FMEA/RPN framework** for failure mode analysis
-- **FAA AC 43-12C compliance** for preventive maintenance task mapping
+- **FAA AC 43-12A compliance** for preventive maintenance task mapping
 - **Interactive Streamlit dashboards** for real-time monitoring
 
 ### Built For
@@ -408,9 +408,9 @@ HIGH_CONFIDENCE_THRESHOLD = 0.95  # Stricter alert threshold
 
 ---
 
-## FAA AC 43-12C Compliance
+## FAA AC 43-12A Compliance
 
-Advisory Circular 43-12C provides guidance on preventive maintenance tasks that pilots can perform versus those requiring A&P certification.
+Advisory Circular 43-12A provides guidance on preventive maintenance tasks that pilots can perform versus those requiring A&P certification.
 
 ### Implementation
 1. **Task Library**: `preventive_tasks` table contains AC 43-12A tasks
