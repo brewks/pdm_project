@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 # ----------------------------
-# GLOBAL STYLES (Airbus-like, fixed contrast)
+# GLOBAL STYLES (Airbus-like, FIXED sidebar contrast)
 # ----------------------------
 def inject_global_styles(dark_mode: bool):
     if dark_mode:
@@ -24,24 +24,22 @@ def inject_global_styles(dark_mode: bool):
         bg2 = "#0E172A"
         panel = "rgba(17, 27, 47, 0.86)"
         border = "rgba(148, 163, 184, 0.14)"
-        text = "#E5E7EB"          # soft off-white
+        text = "#E5E7EB"
         muted = "#CBD5E1"
         shadow = "0 10px 26px rgba(0,0,0,0.30)"
-        input_bg = "rgba(15, 23, 42, 0.75)"
+        input_bg = "rgba(15, 23, 42, 0.85)"
         accent = "#5AA2FF"
-        grid = "#334155"
     else:
-        # ✅ FIXED: strong readable light-mode colors
+        # ✅ STRONG readable light-mode colors
         bg = "#F3F6FB"
         bg2 = "#EEF3FA"
-        panel = "rgba(255, 255, 255, 0.95)"
+        panel = "rgba(255, 255, 255, 0.96)"
         border = "rgba(15, 23, 42, 0.12)"
-        text = "#0F172A"          # solid slate (no transparency)
+        text = "#0F172A"       # solid slate
         muted = "#475569"
         shadow = "0 8px 20px rgba(2, 6, 23, 0.06)"
-        input_bg = "rgba(255, 255, 255, 0.95)"
+        input_bg = "rgba(241, 245, 249, 0.98)"  # subtle slate sidebar
         accent = "#1F6FEB"
-        grid = "#CBD5E1"
 
     st.markdown(
         f"""
@@ -50,6 +48,7 @@ def inject_global_styles(dark_mode: bool):
             --text: {text};
           }}
 
+          /* App background */
           .stApp {{
             background: radial-gradient(1200px 600px at 20% 0%, {bg2}, {bg});
             color: {text};
@@ -77,6 +76,7 @@ def inject_global_styles(dark_mode: bool):
             font-size: 0.95rem;
           }}
 
+          /* Cards */
           .card {{
             background: {panel};
             border: 1px solid {border};
@@ -97,15 +97,46 @@ def inject_global_styles(dark_mode: bool):
             background: {accent};
           }}
 
-          /* Sidebar + selects */
-          section[data-testid="stSidebar"],
-          [data-baseweb="select"] > div {{
+          /* Sidebar background */
+          section[data-testid="stSidebar"] {{
             background: {input_bg} !important;
-            border: 1px solid {border} !important;
+            border-right: 1px solid {border};
+          }}
+
+          /* ============================
+             SIDEBAR CONTRAST FIX
+             ============================ */
+          section[data-testid="stSidebar"] * {{
+            color: {text} !important;
+            opacity: 1 !important;
+          }}
+
+          section[data-testid="stSidebar"] a,
+          section[data-testid="stSidebar"] a span,
+          section[data-testid="stSidebar"] [data-testid="stSidebarNav"] span,
+          section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a {{
+            color: {text} !important;
+            opacity: 1 !important;
+          }}
+
+          section[data-testid="stSidebar"] label,
+          section[data-testid="stSidebar"] p,
+          section[data-testid="stSidebar"] .stMarkdown,
+          section[data-testid="stSidebar"] .stMarkdown * {{
+            color: {text} !important;
+            opacity: 1 !important;
+          }}
+
+          section[data-testid="stSidebar"] [data-baseweb] * {{
+            color: {text} !important;
+            opacity: 1 !important;
+          }}
+
+          section[data-testid="stSidebar"] [data-testid="stSlider"] * {{
             color: {text} !important;
           }}
 
-          /* Dataframe text fix */
+          /* DataFrame text */
           .stDataFrame, .stDataFrame div {{
             color: {text} !important;
           }}
@@ -123,7 +154,7 @@ dark_mode = st.sidebar.toggle("Dark mode", value=True)
 inject_global_styles(dark_mode)
 
 # ----------------------------
-# Matplotlib contrast fix (CRITICAL)
+# Matplotlib contrast sync
 # ----------------------------
 if dark_mode:
     plt.rcParams.update({
