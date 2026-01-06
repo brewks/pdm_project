@@ -41,6 +41,8 @@ def inject_global_styles(dark_mode: bool):
         grid = "rgba(148, 163, 184, 0.10)"
         sidebar_bg = "linear-gradient(180deg, #081024 0%, #0B1220 100%)"
         sidebar_border = "1px solid rgba(148,163,184,0.12)"
+        axis_label = "#A8B3C7"
+        grid_opacity = 0.15
     else:
         bg = "#F3F6FB"
         bg2 = "#EEF3FA"
@@ -54,6 +56,8 @@ def inject_global_styles(dark_mode: bool):
         grid = "rgba(15, 23, 42, 0.08)"
         sidebar_bg = "linear-gradient(180deg, #F7FAFF 0%, #F3F6FB 100%)"
         sidebar_border = "1px solid rgba(2,6,23,0.10)"
+        axis_label = "#334155"
+        grid_opacity = 0.25
 
     st.markdown(
         f"""
@@ -77,10 +81,13 @@ def inject_global_styles(dark_mode: bool):
             font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
           }}
 
+          /* Wider canvas: fixes unused side space */
           .block-container {{
             padding-top: 1.1rem;
             padding-bottom: 2.0rem;
-            max-width: 1200px;
+            max-width: 92vw;
+            padding-left: 2.25rem;
+            padding-right: 2.25rem;
           }}
 
           [data-testid="stToolbar"] {{ visibility: hidden; height: 0; }}
@@ -108,20 +115,25 @@ def inject_global_styles(dark_mode: bool):
             backdrop-filter: blur(8px);
           }}
 
+          /* KPI cards: bigger + more "Airbus strip" */
+          .card.kpi {{
+            padding: 18px 20px;
+            min-height: 108px;
+          }}
           .kpiTitle {{
             font-size: 0.88rem;
             color: var(--muted);
             margin-bottom: 6px;
           }}
           .kpiValue {{
-            font-size: 1.55rem;
-            font-weight: 750;
+            font-size: 1.65rem;
+            font-weight: 800;
             color: var(--text);
           }}
           .kpiSub {{
-            margin-top: 6px;
+            margin-top: 8px;
             color: var(--muted);
-            font-size: 0.86rem;
+            font-size: 0.88rem;
           }}
 
           .badge {{
@@ -129,7 +141,7 @@ def inject_global_styles(dark_mode: bool):
             padding: 4px 10px;
             border-radius: 999px;
             font-size: 0.80rem;
-            font-weight: 700;
+            font-weight: 800;
             color: white;
           }}
 
@@ -152,7 +164,6 @@ def inject_global_styles(dark_mode: bool):
             font-size: 14px;
           }}
 
-          /* Dataframe contrast in light mode */
           .stDataFrame, .stTable {{
             color: var(--text) !important;
           }}
@@ -161,7 +172,7 @@ def inject_global_styles(dark_mode: bool):
           .stButton > button {{
             border-radius: 12px;
             padding: 0.55rem 0.9rem;
-            font-weight: 700;
+            font-weight: 800;
             border: 1px solid var(--border);
             background: var(--accent);
             color: white;
@@ -170,15 +181,15 @@ def inject_global_styles(dark_mode: bool):
             filter: brightness(0.96);
           }}
 
-          /* Simple gauge */
+          /* Gauges */
           .gaugeWrap {{
             display:flex;
             gap:14px;
             align-items:center;
           }}
           .gauge {{
-            width: 74px;
-            height: 74px;
+            width: 84px;
+            height: 84px;
             border-radius: 50%;
             background:
               conic-gradient(var(--accent) var(--deg), rgba(148,163,184,0.18) 0);
@@ -189,8 +200,8 @@ def inject_global_styles(dark_mode: bool):
             box-shadow: var(--shadow);
           }}
           .gaugeInner {{
-            width: 58px;
-            height: 58px;
+            width: 66px;
+            height: 66px;
             border-radius: 50%;
             background: var(--panel);
             display:flex;
@@ -199,7 +210,7 @@ def inject_global_styles(dark_mode: bool):
             flex-direction:column;
           }}
           .gaugeVal {{
-            font-weight: 800;
+            font-weight: 900;
             font-size: 1.05rem;
             color: var(--text);
             line-height: 1.1rem;
@@ -209,10 +220,17 @@ def inject_global_styles(dark_mode: bool):
             color: var(--muted);
             margin-top: 2px;
           }}
+
+          /* Make Streamlit columns feel less compressed */
+          [data-testid="stHorizontalBlock"] {{
+            gap: 1.25rem;
+          }}
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+    return axis_label, grid_opacity
 
 
 def badge(text: str, level: str) -> str:
@@ -227,25 +245,28 @@ def badge(text: str, level: str) -> str:
     return f'<span class="badge" style="background:{c};">{text}</span>'
 
 
-def kpi_card(title: str, value: str, sub: str | None = None):
+def kpi_card(title: str, value: str, sub: str | None = None, badge_html: str | None = None):
     sub_html = f'<div class="kpiSub">{sub}</div>' if sub else ""
+    badge_block = f"<div style='margin-top:10px;'>{badge_html}</div>" if badge_html else ""
     st.markdown(
         f"""
-        <div class="card">
+        <div class="card kpi">
           <div class="kpiTitle">{title}</div>
           <div class="kpiValue">{value}</div>
           {sub_html}
+          {badge_block}
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-def gauge_card(title: str, value_text: str, pct_0_100: float, sub: str | None = None):
+def gauge_card(title: str, value_text: str, pct_0_100: float, sub: str | None = None, extra_html: str | None = None):
     pct = 0.0 if pd.isna(pct_0_100) else float(pct_0_100)
     pct = max(0.0, min(100.0, pct))
     deg = f"{pct * 3.6:.2f}deg"
     sub_html = f"<div class='kpiSub'>{sub}</div>" if sub else ""
+    extra = f"<div style='margin-top:10px;'>{extra_html}</div>" if extra_html else ""
     st.markdown(
         f"""
         <div class="card">
@@ -259,12 +280,70 @@ def gauge_card(title: str, value_text: str, pct_0_100: float, sub: str | None = 
             </div>
             <div style="flex:1;">
               {sub_html}
+              {extra}
             </div>
           </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+
+def clamp_int(x, lo, hi):
+    try:
+        return max(lo, min(hi, int(round(float(x)))))
+    except Exception:
+        return lo
+
+
+def rpn_bucket(rpn: int) -> tuple[str, str]:
+    # label, badge-level
+    if rpn >= 700:
+        return ("Critical", "crit")
+    if rpn >= 450:
+        return ("High", "warn")
+    if rpn >= 200:
+        return ("Medium", "info")
+    return ("Low", "ok")
+
+
+def compute_rpn(component_alerts: pd.DataFrame, component_preds: pd.DataFrame, health_score):
+    # Severity (1–10) from worst open alert severity
+    sev_score = 2
+    if not component_alerts.empty and "severity" in component_alerts.columns:
+        sev_order = {"critical": 9, "warning": 6, "advisory": 3}
+        for s in ["critical", "warning", "advisory"]:
+            if (component_alerts["severity"].astype(str).str.lower() == s).any():
+                sev_score = sev_order[s]
+                break
+
+    # Occurrence (1–10) from max failure confidence
+    occ_score = 2
+    if not component_preds.empty and "prediction_type" in component_preds.columns:
+        f = component_preds[component_preds["prediction_type"] == "failure"].copy()
+        if not f.empty and "confidence" in f.columns:
+            max_conf = pd.to_numeric(f["confidence"], errors="coerce").dropna()
+            if not max_conf.empty:
+                occ_score = clamp_int(max_conf.max() * 10, 1, 10)
+
+    # Detection (1–10): lower health => higher detection score
+    if pd.isna(health_score):
+        det_score = 5
+    else:
+        det_score = clamp_int(10 - (float(health_score) / 10.0), 1, 10)
+
+    rpn = int(sev_score * occ_score * det_score)  # 1..1000
+    return rpn, sev_score, occ_score, det_score
+
+
+def safe_dt(x) -> pd.Timestamp | None:
+    try:
+        t = pd.to_datetime(x, errors="coerce")
+        if pd.isna(t):
+            return None
+        return t
+    except Exception:
+        return None
 
 
 # ----------------------------
@@ -290,19 +369,9 @@ def load_df(query: str) -> pd.DataFrame:
     try:
         with sqlite3.connect(DB_PATH) as conn:
             return pd.read_sql_query(query, conn)
-    except Exception as e:
-        st.error(f"Query failed: {e}")
-        return pd.DataFrame()
-
-
-def safe_dt(x) -> pd.Timestamp | None:
-    try:
-        t = pd.to_datetime(x, errors="coerce")
-        if pd.isna(t):
-            return None
-        return t
     except Exception:
-        return None
+        # Keep UI clean; return empty and handle downstream
+        return pd.DataFrame()
 
 
 # ----------------------------
@@ -310,18 +379,23 @@ def safe_dt(x) -> pd.Timestamp | None:
 # ----------------------------
 st.sidebar.markdown("## 🛩️ GA PdM")
 dark_mode = st.sidebar.toggle("Dark mode", value=True)
-inject_global_styles(dark_mode)
+
+axis_label, grid_opacity = inject_global_styles(dark_mode)
 
 st.sidebar.markdown("---")
-tail_filter = st.sidebar.selectbox(
-    "Aircraft (tail number)",
-    options=["All"] + sorted(load_df("SELECT DISTINCT tail_number FROM aircraft ORDER BY tail_number;")["tail_number"].dropna().tolist()),
-)
+
+tails = load_df("SELECT DISTINCT tail_number FROM aircraft ORDER BY tail_number;")
+tail_list = []
+if not tails.empty and "tail_number" in tails.columns:
+    tail_list = tails["tail_number"].dropna().astype(str).tolist()
+
+tail_filter = st.sidebar.selectbox("Aircraft (tail number)", options=["All"] + tail_list, index=0)
+
 
 # ----------------------------
-# HEADER (with logo on the right)
+# HEADER (logo right)
 # ----------------------------
-h_left, h_right = st.columns([10, 2], vertical_alignment="center")
+h_left, h_right = st.columns([12, 2], vertical_alignment="center")
 with h_left:
     st.markdown(
         """
@@ -335,11 +409,10 @@ with h_left:
 with h_right:
     if os.path.exists(LOGO_PATH):
         st.image(LOGO_PATH, use_container_width=True)
-    else:
-        st.caption("")
+
 
 # ----------------------------
-# LOAD CORE DATA (schema-driven)
+# LOAD DATA
 # ----------------------------
 aircraft_df = load_df(
     """
@@ -360,6 +433,7 @@ components_df = load_df(
 )
 
 snapshot_df = load_df("SELECT * FROM dashboard_snapshot_view ORDER BY tail_number;")
+
 alerts_df = load_df(
     """
     SELECT alert_id, tail_number, component_id, alert_type, severity, message,
@@ -390,43 +464,35 @@ pred_df = load_df(
 )
 
 if tail_filter != "All":
-    aircraft_df = aircraft_df[aircraft_df["tail_number"] == tail_filter]
-    components_df = components_df[components_df["tail_number"] == tail_filter]
-    snapshot_df = snapshot_df[snapshot_df["tail_number"] == tail_filter]
-    alerts_df = alerts_df[alerts_df["tail_number"] == tail_filter]
-    reco_df = reco_df.merge(components_df[["component_id", "tail_number"]], on="component_id", how="inner")
-    pred_df = pred_df.merge(components_df[["component_id", "tail_number"]], on="component_id", how="inner")
+    if not aircraft_df.empty and "tail_number" in aircraft_df.columns:
+        aircraft_df = aircraft_df[aircraft_df["tail_number"].astype(str) == str(tail_filter)]
+    if not components_df.empty and "tail_number" in components_df.columns:
+        components_df = components_df[components_df["tail_number"].astype(str) == str(tail_filter)]
+    if not snapshot_df.empty and "tail_number" in snapshot_df.columns:
+        snapshot_df = snapshot_df[snapshot_df["tail_number"].astype(str) == str(tail_filter)]
+    if not alerts_df.empty and "tail_number" in alerts_df.columns:
+        alerts_df = alerts_df[alerts_df["tail_number"].astype(str) == str(tail_filter)]
+    if not pred_df.empty and "component_id" in pred_df.columns and not components_df.empty:
+        pred_df = pred_df.merge(components_df[["component_id", "tail_number"]], on="component_id", how="inner")
+    if not reco_df.empty and "component_id" in reco_df.columns and not components_df.empty:
+        reco_df = reco_df.merge(components_df[["component_id", "tail_number"]], on="component_id", how="inner")
 
 if aircraft_df.empty:
-    st.error("No aircraft found in the database.")
+    st.error("No aircraft found.")
     st.stop()
 
 if components_df.empty:
-    st.error("No components found in the database.")
+    st.error("No components found.")
     st.stop()
 
+
 # ----------------------------
-# TOP: Fleet summary (simple, relatable)
+# TOP KPI STRIP (bigger + wider)
 # ----------------------------
-# Map predictive_status to friendly label
-status_map = {
-    "normal": ("Normal", "ok"),
-    "monitoring": ("Monitor", "warn"),
-    "attention_needed": ("Attention", "warn"),
-    "maintenance_required": ("Maintenance", "crit"),
-}
+fleet_active_alerts = int(alerts_df.shape[0]) if alerts_df is not None else 0
+fleet_crit = int((alerts_df["severity"].astype(str).str.lower() == "critical").sum()) if not alerts_df.empty and "severity" in alerts_df.columns else 0
+fleet_warn = int((alerts_df["severity"].astype(str).str.lower() == "warning").sum()) if not alerts_df.empty and "severity" in alerts_df.columns else 0
 
-def fmt_status(s: str) -> tuple[str, str]:
-    if not s:
-        return ("Unknown", "muted")
-    s = str(s).strip().lower()
-    return status_map.get(s, ("Unknown", "muted"))
-
-fleet_active_alerts = int(alerts_df.shape[0])
-fleet_crit = int((alerts_df["severity"] == "critical").sum()) if not alerts_df.empty else 0
-fleet_warn = int((alerts_df["severity"] == "warning").sum()) if not alerts_df.empty else 0
-
-# Use snapshot if available (it aggregates)
 avg_health = None
 if not snapshot_df.empty and "health_score" in snapshot_df.columns:
     try:
@@ -434,32 +500,53 @@ if not snapshot_df.empty and "health_score" in snapshot_df.columns:
     except Exception:
         avg_health = None
 
-cA, cB, cC, cD = st.columns(4, gap="large")
-with cA:
+last_dates = aircraft_df["last_predictive_analysis"].dropna().tolist() if "last_predictive_analysis" in aircraft_df.columns else []
+last_dt = max([safe_dt(x) for x in last_dates if safe_dt(x) is not None], default=None)
+
+status_map = {
+    "normal": ("Normal", "ok"),
+    "monitoring": ("Monitor", "warn"),
+    "attention_needed": ("Attention", "warn"),
+    "maintenance_required": ("Maintenance", "crit"),
+}
+def fmt_status(s: str) -> tuple[str, str]:
+    if not s:
+        return ("Unknown", "muted")
+    s = str(s).strip().lower()
+    return status_map.get(s, ("Unknown", "muted"))
+
+top_status = None
+if "predictive_status" in aircraft_df.columns and not aircraft_df["predictive_status"].dropna().empty:
+    top_status = aircraft_df["predictive_status"].dropna().astype(str).str.lower().value_counts().idxmax()
+
+label, lvl = fmt_status(top_status) if top_status else ("Unknown", "muted")
+
+kpi1, kpi2, kpi3, kpi4 = st.columns([1.35, 1.35, 1.15, 1.15], gap="large")
+with kpi1:
     kpi_card("Active alerts", f"{fleet_active_alerts}", f"Critical: {fleet_crit}  •  Warning: {fleet_warn}")
-with cB:
-    gauge_card("Average health", f"{int(round(avg_health)) if avg_health is not None else '—'}", avg_health if avg_health is not None else 0, "0–100 scale")
-with cC:
-    # Latest analysis date across aircraft
-    last_dates = aircraft_df["last_predictive_analysis"].dropna().tolist()
-    last_dt = max([safe_dt(x) for x in last_dates if safe_dt(x) is not None], default=None)
-    kpi_card("Last analysis", last_dt.strftime("%Y-%m-%d") if last_dt else "—", "Latest recorded run")
-with cD:
-    # Most common status
-    if not aircraft_df["predictive_status"].dropna().empty:
-        top_status = aircraft_df["predictive_status"].dropna().astype(str).str.lower().value_counts().idxmax()
-        label, lvl = fmt_status(top_status)
-        kpi_card("Overall status", label, f"{badge(label, lvl)}")
+with kpi2:
+    # Keep gauge in strip (readable at a glance)
+    if avg_health is None:
+        kpi_card("Average health", "—", "0–100 scale")
     else:
-        kpi_card("Overall status", "—")
+        gauge_card("Average health", f"{int(round(avg_health))}", avg_health, "0–100 scale")
+with kpi3:
+    kpi_card("Last analysis", last_dt.strftime("%Y-%m-%d") if last_dt else "—", "Latest recorded run")
+with kpi4:
+    kpi_card("Overall status", label, None, badge_html=badge(label, lvl))
 
 st.markdown("")
 
+
 # ----------------------------
-# SELECT A COMPONENT (NO KeyError approach)
+# COMPONENT SELECT (safe resolution, no KeyError)
 # ----------------------------
-# Build labels directly from the dataframe (and use the same df to resolve id)
 comp_view = components_df.copy()
+for col in ["tail_number", "type", "name"]:
+    if col not in comp_view.columns:
+        st.error("Components table is missing required columns.")
+        st.stop()
+
 comp_view["label"] = (
     comp_view["tail_number"].astype(str).fillna("—")
     + " • "
@@ -468,7 +555,7 @@ comp_view["label"] = (
     + comp_view["name"].astype(str).fillna("—")
 )
 
-left, right = st.columns([2, 1], gap="large")
+left, right = st.columns([2.2, 1], gap="large")
 
 with left:
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -481,10 +568,9 @@ with left:
     )
     st.markdown("</div>", unsafe_allow_html=True)
 
-# Resolve ID safely (no mapping dict that can miss keys)
 sel_row = comp_view[comp_view["label"] == selected_label]
 if sel_row.empty:
-    st.error("Selection error. Please refresh the page.")
+    st.error("Selection error. Please refresh.")
     st.stop()
 
 selected_comp_id = int(sel_row["component_id"].iloc[0])
@@ -492,60 +578,75 @@ selected_tail = str(sel_row["tail_number"].iloc[0])
 selected_type = str(sel_row["type"].iloc[0])
 selected_name = str(sel_row["name"].iloc[0])
 
-# Component signals
-rul = sel_row["remaining_useful_life"].iloc[0]
-health = sel_row["last_health_score"].iloc[0]
-condition = str(sel_row["condition"].iloc[0]) if pd.notna(sel_row["condition"].iloc[0]) else "—"
+rul = sel_row["remaining_useful_life"].iloc[0] if "remaining_useful_life" in sel_row.columns else None
+health = sel_row["last_health_score"].iloc[0] if "last_health_score" in sel_row.columns else None
+condition = str(sel_row["condition"].iloc[0]) if "condition" in sel_row.columns and pd.notna(sel_row["condition"].iloc[0]) else "—"
 
-comp_preds = pred_df[pred_df["component_id"] == selected_comp_id].copy()
-comp_alerts = alerts_df[alerts_df["component_id"] == selected_comp_id].copy()
-comp_reco = reco_df[reco_df["component_id"] == selected_comp_id].copy()
+comp_preds = pred_df[pred_df["component_id"] == selected_comp_id].copy() if not pred_df.empty and "component_id" in pred_df.columns else pd.DataFrame()
+comp_alerts = alerts_df[alerts_df["component_id"] == selected_comp_id].copy() if not alerts_df.empty and "component_id" in alerts_df.columns else pd.DataFrame()
+comp_reco = reco_df[reco_df["component_id"] == selected_comp_id].copy() if not reco_df.empty and "component_id" in reco_df.columns else pd.DataFrame()
 
-# Latest RUL prediction (from predictions table)
+# Latest RUL prediction
 latest_rul_pred = None
 latest_rul_conf = None
 latest_rul_time = None
-if not comp_preds.empty:
+if not comp_preds.empty and "prediction_type" in comp_preds.columns:
     r = comp_preds[comp_preds["prediction_type"] == "remaining_life"].copy()
     if not r.empty:
         r["prediction_time"] = pd.to_datetime(r["prediction_time"], errors="coerce")
         r = r.dropna(subset=["prediction_time"]).sort_values("prediction_time", ascending=False)
         if not r.empty:
-            latest_rul_pred = float(r["predicted_value"].iloc[0])
-            latest_rul_conf = float(r["confidence"].iloc[0])
+            latest_rul_pred = float(pd.to_numeric(r["predicted_value"].iloc[0], errors="coerce"))
+            latest_rul_conf = float(pd.to_numeric(r["confidence"].iloc[0], errors="coerce"))
             latest_rul_time = r["prediction_time"].iloc[0]
 
-# Right side summary
+# Simple risk label
+if not comp_alerts.empty and "severity" in comp_alerts.columns and (comp_alerts["severity"].astype(str).str.lower() == "critical").any():
+    risk_lbl, risk_lvl = ("High", "crit")
+elif not comp_alerts.empty and "severity" in comp_alerts.columns and (comp_alerts["severity"].astype(str).str.lower() == "warning").any():
+    risk_lbl, risk_lvl = ("Medium", "warn")
+else:
+    risk_lbl, risk_lvl = ("Low", "ok")
+
+# RPN (derived)
+rpn, rpn_sev, rpn_occ, rpn_det = compute_rpn(comp_alerts, comp_preds, health)
+rpn_label, rpn_level = rpn_bucket(rpn)
+rpn_pct = max(0.0, min(100.0, (rpn / 1000.0) * 100.0))
+
+
 with right:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("### Summary")
     st.markdown(f"**{selected_tail}** • {selected_type.replace('_',' ')} • **{selected_name}**")
     st.markdown(f"Condition: **{condition.replace('_',' ')}**")
-
-    # Risk label from alerts (simple and explainable)
-    if not comp_alerts.empty and (comp_alerts["severity"] == "critical").any():
-        risk_lbl, risk_lvl = ("High", "crit")
-    elif not comp_alerts.empty and (comp_alerts["severity"] == "warning").any():
-        risk_lbl, risk_lvl = ("Medium", "warn")
-    else:
-        risk_lbl, risk_lvl = ("Low", "ok")
-
     st.markdown(f"Risk: {badge(risk_lbl, risk_lvl)}", unsafe_allow_html=True)
     st.markdown("---")
 
-    a1, a2 = st.columns(2)
+    a1, a2, a3 = st.columns(3, gap="large")
+
     with a1:
-        gauge_card("Health", f"{int(health) if pd.notna(health) else '—'}", float(health) if pd.notna(health) else 0, "Higher is better")
-    with a2:
-        # RUL gauge: normalize to a simple 0–100 scale for display.
-        # For pilots/mechanics, we show hours directly, and the gauge is just a quick glance.
-        disp_rul = latest_rul_pred if latest_rul_pred is not None else (float(rul) if pd.notna(rul) else None)
-        if disp_rul is None:
-            gauge_card("Remaining time", "—", 0, "Hours")
+        if pd.isna(health):
+            gauge_card("Health", "—", 0, "Higher is better")
         else:
-            # Clamp for gauge: treat 0–500h as 0–100% for display (adjust if your GA profile differs)
+            gauge_card("Health", f"{int(float(health))}", float(health), "Higher is better")
+
+    with a2:
+        disp_rul = latest_rul_pred if latest_rul_pred is not None else (float(rul) if rul is not None and pd.notna(rul) else None)
+        if disp_rul is None:
+            gauge_card("Remaining time", "—", 0, "Hours (estimate)")
+        else:
+            # Gauge normalization for quick glance: 0–500h -> 0–100%
             pct = max(0.0, min(100.0, (float(disp_rul) / 500.0) * 100.0))
             gauge_card("Remaining time", f"{float(disp_rul):.0f}h", pct, "Hours (estimate)")
+
+    with a3:
+        gauge_card(
+            "RPN (risk priority)",
+            f"{rpn}",
+            rpn_pct,
+            "0–1000 scale",
+            extra_html=f"{badge(rpn_label, rpn_level)}<div class='muted' style='margin-top:6px;'>Sev {rpn_sev} × Lik {rpn_occ} × Det {rpn_det}</div>",
+        )
 
     if latest_rul_time is not None and latest_rul_conf is not None:
         st.caption(f"Last RUL update: {latest_rul_time.strftime('%Y-%m-%d %H:%M')} • Confidence: {latest_rul_conf*100:.0f}%")
@@ -554,13 +655,11 @@ with right:
 
 st.markdown("")
 
-# ----------------------------
-# CHART + ALERTS (clean and usable)
-# ----------------------------
-c1, c2 = st.columns([2.2, 1], gap="large")
 
-axis_label = "#A8B3C7" if dark_mode else "#334155"
-grid_opacity = 0.15 if dark_mode else 0.25
+# ----------------------------
+# CHART + ALERTS
+# ----------------------------
+c1, c2 = st.columns([2.25, 1], gap="large")
 
 with c1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -569,7 +668,7 @@ with c1:
     if comp_preds.empty:
         st.info("No prediction history available for this component.")
     else:
-        trend = comp_preds[comp_preds["prediction_type"] == "remaining_life"].copy()
+        trend = comp_preds[comp_preds["prediction_type"] == "remaining_life"].copy() if "prediction_type" in comp_preds.columns else pd.DataFrame()
         if trend.empty:
             st.info("No remaining-life history available for this component.")
         else:
@@ -590,7 +689,7 @@ with c1:
                         alt.Tooltip("time_horizon:N", title="Horizon"),
                     ],
                 )
-                .properties(height=340)
+                .properties(height=360)
                 .configure_view(strokeOpacity=0)
                 .configure_axis(
                     grid=True,
@@ -612,19 +711,21 @@ with c2:
         st.markdown(badge("None", "ok") + " No open alerts for this component.", unsafe_allow_html=True)
     else:
         show = comp_alerts.copy()
-        show["generated_time"] = pd.to_datetime(show["generated_time"], errors="coerce")
-        show = show.sort_values("generated_time", ascending=False).head(6)
+        if "generated_time" in show.columns:
+            show["generated_time"] = pd.to_datetime(show["generated_time"], errors="coerce")
+            show = show.sort_values("generated_time", ascending=False)
+        show = show.head(6)
 
         for _, row in show.iterrows():
             sev = str(row.get("severity", "")).lower()
             lvl = "crit" if sev == "critical" else ("warn" if sev == "warning" else "info")
-            msg = str(row.get("message", ""))
+            msg = str(row.get("message", "")).strip()
             ts = row.get("generated_time")
             ts_txt = ts.strftime("%Y-%m-%d %H:%M") if pd.notna(ts) else "—"
-            st.markdown(f"{badge(sev.capitalize(), lvl)} <span class='muted'>({ts_txt})</span>", unsafe_allow_html=True)
-            st.write(msg)
 
-            # Confidence if present
+            st.markdown(f"{badge(sev.capitalize() if sev else 'Alert', lvl)} <span class='muted'>({ts_txt})</span>", unsafe_allow_html=True)
+            st.write(msg if msg else "—")
+
             cs = row.get("confidence_score")
             if pd.notna(cs):
                 st.caption(f"Confidence: {float(cs)*100:.0f}%")
@@ -633,11 +734,12 @@ with c2:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+
 # ----------------------------
-# NEXT STEPS (tasks + quick table)
+# NEXT STEPS
 # ----------------------------
 st.markdown("")
-t1, t2 = st.columns([1.4, 1], gap="large")
+t1, t2 = st.columns([1.6, 1.1], gap="large")
 
 with t1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -647,15 +749,17 @@ with t1:
         st.info("No recommendations recorded for this component.")
     else:
         view = comp_reco.copy()
-        view["timestamp"] = pd.to_datetime(view["timestamp"], errors="coerce")
-        view = view.sort_values("timestamp", ascending=False).head(8)
+        if "timestamp" in view.columns:
+            view["timestamp"] = pd.to_datetime(view["timestamp"], errors="coerce")
+            view = view.sort_values("timestamp", ascending=False)
+        view = view.head(10)
 
         cols = ["timestamp", "task_name", "system", "pilot_allowed", "ac_43_ref", "confidence", "acknowledged", "implemented"]
         cols = [c for c in cols if c in view.columns]
         st.dataframe(view[cols], use_container_width=True, hide_index=True)
 
         st.download_button(
-            "Download recommendations (CSV)",
+            "Download (CSV)",
             data=view[cols].to_csv(index=False).encode("utf-8"),
             file_name=f"{selected_tail}_{selected_name}_recommendations.csv".replace(" ", "_"),
             mime="text/csv",
@@ -671,8 +775,10 @@ with t2:
         st.info("No predictions available.")
     else:
         p = comp_preds.copy()
-        p["prediction_time"] = pd.to_datetime(p["prediction_time"], errors="coerce")
-        p = p.sort_values("prediction_time", ascending=False).head(10)
+        if "prediction_time" in p.columns:
+            p["prediction_time"] = pd.to_datetime(p["prediction_time"], errors="coerce")
+            p = p.sort_values("prediction_time", ascending=False)
+        p = p.head(12)
 
         show_cols = ["prediction_time", "prediction_type", "predicted_value", "confidence", "time_horizon"]
         show_cols = [c for c in show_cols if c in p.columns]
