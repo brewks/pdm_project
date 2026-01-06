@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 # ----------------------------
-# GLOBAL STYLES (Airbus-like)
+# GLOBAL STYLES (Airbus-like, fixed contrast)
 # ----------------------------
 def inject_global_styles(dark_mode: bool):
     if dark_mode:
@@ -24,19 +24,20 @@ def inject_global_styles(dark_mode: bool):
         bg2 = "#0E172A"
         panel = "rgba(17, 27, 47, 0.86)"
         border = "rgba(148, 163, 184, 0.14)"
-        text = "rgba(226, 232, 240, 0.92)"
-        muted = "rgba(226, 232, 240, 0.68)"
+        text = "#E5E7EB"          # soft off-white
+        muted = "#CBD5E1"
         shadow = "0 10px 26px rgba(0,0,0,0.30)"
         input_bg = "rgba(15, 23, 42, 0.75)"
         accent = "#5AA2FF"
         grid = "#334155"
     else:
+        # ✅ FIXED: strong readable light-mode colors
         bg = "#F3F6FB"
         bg2 = "#EEF3FA"
         panel = "rgba(255, 255, 255, 0.95)"
         border = "rgba(15, 23, 42, 0.12)"
-        text = "#0F172A"          # solid dark slate (NOT translucent)
-        muted = "#475569"         # readable gray
+        text = "#0F172A"          # solid slate (no transparency)
+        muted = "#475569"
         shadow = "0 8px 20px rgba(2, 6, 23, 0.06)"
         input_bg = "rgba(255, 255, 255, 0.95)"
         accent = "#1F6FEB"
@@ -45,10 +46,15 @@ def inject_global_styles(dark_mode: bool):
     st.markdown(
         f"""
         <style>
+          :root {{
+            --text: {text};
+          }}
+
           .stApp {{
             background: radial-gradient(1200px 600px at 20% 0%, {bg2}, {bg});
             color: {text};
-            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+            font-family: ui-sans-serif, system-ui, -apple-system,
+                         Segoe UI, Roboto, Helvetica, Arial;
           }}
 
           .block-container {{
@@ -61,7 +67,10 @@ def inject_global_styles(dark_mode: bool):
             height: 0;
           }}
 
-          h1, h2, h3 {{ letter-spacing: -0.02em; }}
+          h1, h2, h3 {{
+            letter-spacing: -0.02em;
+            color: {text};
+          }}
 
           .muted {{
             color: {muted};
@@ -75,6 +84,7 @@ def inject_global_styles(dark_mode: bool):
             padding: 16px 18px;
             box-shadow: {shadow};
             margin-bottom: 16px;
+            color: {text};
           }}
 
           .badge {{
@@ -87,10 +97,17 @@ def inject_global_styles(dark_mode: bool):
             background: {accent};
           }}
 
-          [data-baseweb="select"] > div,
-          section[data-testid="stSidebar"] {{
+          /* Sidebar + selects */
+          section[data-testid="stSidebar"],
+          [data-baseweb="select"] > div {{
             background: {input_bg} !important;
             border: 1px solid {border} !important;
+            color: {text} !important;
+          }}
+
+          /* Dataframe text fix */
+          .stDataFrame, .stDataFrame div {{
+            color: {text} !important;
           }}
         </style>
         """,
@@ -104,6 +121,26 @@ st.sidebar.markdown("## 🛩️ GA PdM")
 dark_mode = st.sidebar.toggle("Dark mode", value=True)
 
 inject_global_styles(dark_mode)
+
+# ----------------------------
+# Matplotlib contrast fix (CRITICAL)
+# ----------------------------
+if dark_mode:
+    plt.rcParams.update({
+        "text.color": "#E5E7EB",
+        "axes.labelcolor": "#E5E7EB",
+        "xtick.color": "#CBD5E1",
+        "ytick.color": "#CBD5E1",
+        "axes.edgecolor": "#64748B",
+    })
+else:
+    plt.rcParams.update({
+        "text.color": "#0F172A",
+        "axes.labelcolor": "#0F172A",
+        "xtick.color": "#334155",
+        "ytick.color": "#334155",
+        "axes.edgecolor": "#334155",
+    })
 
 # ----------------------------
 # DATA LOADER
@@ -177,7 +214,7 @@ st.dataframe(df, use_container_width=True, hide_index=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ----------------------------
-# VISUALS (calm matplotlib)
+# VISUALS
 # ----------------------------
 def plot_rul_bar(df):
     fig, ax = plt.subplots(figsize=(9, 4))
@@ -237,4 +274,3 @@ if refresh_interval > 0:
     st.info(f"Auto-refreshing every {refresh_interval}s")
     time.sleep(refresh_interval)
     st.rerun()
-
