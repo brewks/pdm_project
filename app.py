@@ -302,26 +302,22 @@ def kpi_card(title: str, value: str, sub: str | None = None, badge_html: str | N
     )
 
 
-def gauge_card(title: str, value_text: str, pct_0_100: float, sub: str | None = None, extra_html: str | None = None):
-    pct = 0.0 if pd.isna(pct_0_100) else float(pct_0_100)
-    pct = max(0.0, min(100.0, pct))
-    deg = f"{pct * 3.6:.2f}deg"
-    sub_html = f"<div class='kpiSub'>{sub}</div>" if sub else ""
-    extra = f"<div style='margin-top:10px;'>{extra_html}</div>" if extra_html else ""
+def gauge_card(title: str, value_text: str, pct_0_100: float, helper: str):
+    pct = max(0.0, min(100.0, float(pct_0_100)))
+    deg = f"{pct * 3.6}deg"
     st.markdown(
         f"""
         <div class="card">
           <div class="kpiTitle">{title}</div>
           <div class="gaugeWrap">
-            <div class="gauge" style="--deg: {deg};">
+            <div class="gauge" style="--deg:{deg};">
               <div class="gaugeInner">
                 <div class="gaugeVal">{value_text}</div>
-                <div class="gaugeLbl">{int(round(pct))}%</div>
+                <div class="gaugeLbl">{pct:.0f}%</div>
               </div>
             </div>
-            <div style="flex:1;">
-              {sub_html}
-              {extra}
+            <div>
+              <div class="kpiSub">{helper}</div>
             </div>
           </div>
         </div>
@@ -826,3 +822,4 @@ with t2:
         st.dataframe(p[show_cols], use_container_width=True, hide_index=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
+
