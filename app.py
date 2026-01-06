@@ -4,6 +4,7 @@ import sqlite3
 import json
 import altair as alt
 import os
+from pathlib import Path  # ✅ ADDED (for reliable logo path)
 
 # Ensure Altair doesn't override your styling (important)
 alt.themes.enable("none")
@@ -265,20 +266,33 @@ predictions_df = load_df(
 
 
 # ----------------------------
-# HERO
+# HERO (✅ UPDATED: title + logo at top-right)
 # ----------------------------
-st.markdown(
-    """
-    <div style="margin-bottom: 18px;">
-      <h1 style="margin-bottom: 6px;">General Aviation Predictive Maintenance</h1>
-      <div class="muted">
-        Component-level remaining-useful-life (RUL) estimation and failure risk monitoring,
-        optimized for GA maintenance workflows.
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+APP_DIR = Path(__file__).resolve().parent
+LOGO_PATH = APP_DIR / "logo.png"
+
+h_left, h_right = st.columns([8, 1], vertical_alignment="center")
+
+with h_left:
+    st.markdown(
+        """
+        <div style="margin-bottom: 18px;">
+          <h1 style="margin-bottom: 6px;">General Aviation Predictive Maintenance</h1>
+          <div class="muted">
+            Component-level remaining-useful-life (RUL) estimation and failure risk monitoring,
+            optimized for GA maintenance workflows.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with h_right:
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), width=90)
+    else:
+        st.caption("logo.png not found")
+
 
 # ----------------------------
 # SELECTOR (Hero control)
@@ -360,8 +374,6 @@ with left:
             alt_data["prediction_time"] = pd.to_datetime(alt_data["prediction_time"], errors="coerce")
             alt_data = alt_data.dropna(subset=["prediction_time"])
 
-            # Airbus-style chart: remove box border, soften grid, calmer axis labels
-            # NOTE: If you want true theme-based colors, see the optional note below.
             chart = (
                 alt.Chart(alt_data)
                 .mark_line(point=True)
@@ -375,7 +387,7 @@ with left:
                     ],
                 )
                 .properties(height=360)
-                .configure_view(strokeOpacity=0)  # removes the hard chart border box
+                .configure_view(strokeOpacity=0)
                 .configure_axis(
                     grid=True,
                     gridOpacity=0.15,
@@ -430,7 +442,6 @@ with tabs[0]:
         st.info("No predictions available.")
     else:
         show = comp_preds.head(25).copy()
-        # Keep it readable
         cols = [c for c in ["prediction_time", "prediction_type", "predicted_value", "confidence", "time_horizon"] if c in show.columns]
         st.dataframe(show[cols], use_container_width=True, hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -512,6 +523,3 @@ with tabs[4]:
             st.error("❌ Invalid JSON or missing required fields: precision, recall, accuracy, f1_score.")
 
     st.markdown('</div>', unsafe_allow_html=True)
-
-
-
