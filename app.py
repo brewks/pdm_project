@@ -1,4 +1,3 @@
-```python
 # ============================================================
 # GA PdM Dashboard (UI Upgrade)
 # - Apple/Airbus-inspired layout: Hero → KPI strip → Hero chart → Tabs
@@ -477,3 +476,4 @@ with tabs[4]:
 
     st.markdown('</div>', unsafe_allow_html=True)
 ```
+
