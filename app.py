@@ -1,10 +1,3 @@
-# ============================================================
-# GA PdM Dashboard (UI Upgrade)
-# - Apple/Airbus-inspired layout: Hero → KPI strip → Hero chart → Tabs
-# - Calm design system: consistent cards, spacing, minimal color
-# - Keeps your DB restore + data logic intact
-# ============================================================
-
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -475,5 +468,5 @@ with tabs[4]:
             st.error("❌ Invalid JSON or missing required fields: precision, recall, accuracy, f1_score.")
 
     st.markdown('</div>', unsafe_allow_html=True)
-```
+
 
