@@ -33,12 +33,12 @@ def inject_global_styles(dark_mode: bool):
     else:
         bg = "#F3F6FB"
         bg2 = "#EEF3FA"
-        panel = "rgba(255, 255, 255, 0.90)"
-        border = "rgba(15, 23, 42, 0.10)"
-        text = "rgba(15, 23, 42, 0.92)"
-        muted = "rgba(15, 23, 42, 0.65)"
+        panel = "rgba(255, 255, 255, 0.95)"
+        border = "rgba(15, 23, 42, 0.12)"
+        text = "#0F172A"          # solid dark slate (NOT translucent)
+        muted = "#475569"         # readable gray
         shadow = "0 8px 20px rgba(2, 6, 23, 0.06)"
-        input_bg = "rgba(255, 255, 255, 0.92)"
+        input_bg = "rgba(255, 255, 255, 0.95)"
         accent = "#1F6FEB"
         grid = "#CBD5E1"
 
@@ -237,3 +237,4 @@ if refresh_interval > 0:
     st.info(f"Auto-refreshing every {refresh_interval}s")
     time.sleep(refresh_interval)
     st.rerun()
+
