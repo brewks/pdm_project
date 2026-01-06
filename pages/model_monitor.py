@@ -1,137 +1,267 @@
 import streamlit as st
-import pandas as pd
 import json
+import altair as alt
 from utils import load_df, validate_metrics
 
-# Configure the page layout and title
-st.set_page_config(page_title="Model Monitoring", layout="wide")
+# Ensure Altair respects custom styling
+alt.themes.enable("none")
 
-# === DARK MODE TOGGLE ===
-# Simple switch in the sidebar to flip between light and dark themes
-dark_mode = st.sidebar.checkbox("🌙 Enable Dark Mode")
-
-if dark_mode:
-    # Colors for dark theme
-    background = "linear-gradient(135deg, #0f0f0f, #1f2937)"
-    text_color = "#f5f7fa"
-    card_color = "rgba(255, 255, 255, 0.05)"
-    border_color = "rgba(255, 255, 255, 0.15)"
-else:
-    # Colors for light theme
-    background = "linear-gradient(135deg, #e8f0f8, #ffffff)"
-    text_color = "#1a1a1a"
-    card_color = "#ffffff"
-    border_color = "rgba(0, 0, 0, 0.1)"
-
-# === GLOBAL STYLING ===
-# Inject a bit of custom CSS to make the dashboard look more like a real app
-st.markdown(f"""
-<style>
-/* App background and base font */
-.stApp {{
-    background: {background};
-    color: {text_color};
-    font-family: 'Segoe UI', sans-serif;
-}}
-
-/* Generic card container used across the page */
-.card {{
-    background: {card_color};
-    padding: 20px;
-    border-radius: 16px;
-    border: 1px solid {border_color};
-    box-shadow: 0 8px 30px rgba(0,0,0,0.25);
-    margin-bottom: 25px;
-    transition: transform 0.2s ease-in-out;
-}}
-.card:hover {{
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(0,0,0,0.35);
-}}
-
-/* Headings for sections */
-.section-title {{
-    font-size: 28px;
-    font-weight: 700;
-    margin-bottom: 10px;
-    text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
-}}
-
-/* Subtle hover effect on table rows */
-.dataframe tbody tr:hover {{
-    background: rgba(150,150,150,0.1);
-}}
-
-/* Style around metric widgets */
-.metric {{
-    background: {card_color};
-    padding: 12px !important;
-    border-radius: 12px !important;
-    border: 1px solid {border_color};
-    box-shadow: 0px 4px 15px rgba(0,0,0,0.25);
-}}
-</style>
-""", unsafe_allow_html=True)
-
-# === TITLE CARD ===
-# Simple title block at the top of the page
-st.markdown(
-    "<div class='card'><div class='section-title'>📊 Predictive Model Monitoring Dashboard</div></div>",
-    unsafe_allow_html=True
+# ----------------------------
+# PAGE CONFIG
+# ----------------------------
+st.set_page_config(
+    page_title="Model Monitoring",
+    page_icon="📊",
+    layout="wide",
 )
 
-# === LOAD DATA ===
-# Pull the list of models and their metrics from the predictive_models table
-model_df = load_df("""
-    SELECT model_id, model_name, model_type AS algorithm, performance_metrics 
-    FROM predictive_models 
-    ORDER BY model_id DESC
-""")
+# ----------------------------
+# GLOBAL STYLES (Airbus-like)
+# ----------------------------
+def inject_global_styles(dark_mode: bool):
+    if dark_mode:
+        bg = "#0B1220"
+        bg2 = "#0E172A"
+        panel = "rgba(17, 27, 47, 0.86)"
+        border = "rgba(148, 163, 184, 0.14)"
+        text = "rgba(226, 232, 240, 0.92)"
+        muted = "rgba(226, 232, 240, 0.68)"
+        shadow = "0 10px 26px rgba(0,0,0,0.30)"
+        input_bg = "rgba(15, 23, 42, 0.75)"
+        accent = "#5AA2FF"
+    else:
+        bg = "#F3F6FB"
+        bg2 = "#EEF3FA"
+        panel = "rgba(255, 255, 255, 0.88)"
+        border = "rgba(15, 23, 42, 0.10)"
+        text = "rgba(15, 23, 42, 0.92)"
+        muted = "rgba(15, 23, 42, 0.65)"
+        shadow = "0 8px 20px rgba(2, 6, 23, 0.06)"
+        input_bg = "rgba(255, 255, 255, 0.92)"
+        accent = "#1F6FEB"
 
-# === DISPLAY TABLE ===
-# Show a compact table of the models available for selection
-st.markdown("<div class='section-title'>Available Models</div>", unsafe_allow_html=True)
-st.dataframe(model_df[["model_id", "model_name", "algorithm"]])
+    st.markdown(
+        f"""
+        <style>
+          .stApp {{
+            background: radial-gradient(1200px 600px at 20% 0%, {bg2}, {bg});
+            color: {text};
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+          }}
 
-# === METRIC EXPLORATION PANEL ===
-# Let the user pick which model to inspect
-selected_model = st.selectbox("Select Model to View Metrics", model_df["model_id"])
-metrics_json = model_df[model_df["model_id"] == selected_model]["performance_metrics"].values[0]
+          .block-container {{
+            max-width: 1200px;
+            padding-top: 1.25rem;
+          }}
 
-st.markdown(
-    f"<div class='section-title'>Performance Metrics for Model ID {selected_model}</div>",
-    unsafe_allow_html=True
-)
+          [data-testid="stToolbar"], footer, header {{
+            visibility: hidden;
+            height: 0;
+          }}
 
-# If the JSON stored in the DB is valid, unpack and show the metrics
-if validate_metrics(metrics_json):
-    metrics = json.loads(metrics_json)
+          h1, h2, h3 {{
+            letter-spacing: -0.02em;
+          }}
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Precision", f"{metrics['precision'] * 100:.1f}%")
-    col2.metric("Recall", f"{metrics['recall'] * 100:.1f}%")
-    col3.metric("Accuracy", f"{metrics['accuracy'] * 100:.1f}%")
-    col4.metric("F1 Score", f"{metrics['f1_score'] * 100:.1f}%")
+          .muted {{
+            color: {muted};
+            font-size: 0.95rem;
+          }}
 
-    # Quick download option so someone can grab the metrics as a JSON file
-    st.download_button(
-        label="📥 Download Metrics JSON",
-        data=json.dumps(metrics, indent=2),
-        file_name=f"model_{selected_model}_metrics.json",
-        mime="application/json"
+          .card {{
+            background: {panel};
+            border: 1px solid {border};
+            border-radius: 16px;
+            padding: 16px 18px;
+            box-shadow: {shadow};
+            margin-bottom: 16px;
+          }}
+
+          .kpiTitle {{
+            font-size: 0.88rem;
+            color: {muted};
+          }}
+          .kpiValue {{
+            font-size: 1.45rem;
+            font-weight: 700;
+          }}
+
+          .badge {{
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: white;
+            background: {accent};
+          }}
+
+          [data-baseweb="select"] > div {{
+            border-radius: 12px !important;
+            background: {input_bg} !important;
+            border: 1px solid {border} !important;
+          }}
+
+          textarea.stTextArea textarea {{
+            background: {input_bg};
+            color: {text};
+            border: 1px solid {border};
+            border-radius: 12px;
+          }}
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
-else:
-    st.error("Invalid or missing metric fields.")
 
-# === JSON VALIDATOR ===
-# Small helper section where you can paste raw JSON to check the format
-st.markdown("---")
-st.markdown("<div class='card'><h4>🧪 Validate Your Metrics JSON</h4></div>", unsafe_allow_html=True)
+def kpi_card(title, value):
+    st.markdown(
+        f"""
+        <div class="card">
+          <div class="kpiTitle">{title}</div>
+          <div class="kpiValue">{value}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-user_json = st.text_area("Paste JSON:", height=150)
+# ----------------------------
+# SIDEBAR
+# ----------------------------
+st.sidebar.markdown("## 📊 GA PdM")
+dark_mode = st.sidebar.toggle("Dark mode", value=True)
+st.sidebar.caption("Model performance & governance")
 
-if st.button("Validate JSON"):
+inject_global_styles(dark_mode)
+
+# ----------------------------
+# HERO
+# ----------------------------
+st.markdown(
+    """
+    <div style="margin-bottom:18px;">
+      <h1>Model Monitoring</h1>
+      <div class="muted">
+        Performance metrics, versioning, and validation status of predictive models.
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ----------------------------
+# LOAD MODELS
+# ----------------------------
+models_df = load_df(
+    """
+    SELECT model_id,
+           model_name,
+           model_type AS algorithm,
+           version,
+           created_at,
+           performance_metrics
+    FROM predictive_models
+    ORDER BY created_at DESC
+    """
+)
+
+if models_df.empty:
+    st.markdown(
+        """
+        <div class="card">
+          <span class="badge">No Models</span>
+          <p style="margin-top:10px;">
+            No predictive models are currently registered in the system.
+          </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+# ----------------------------
+# MODEL SELECTION
+# ----------------------------
+st.markdown('<div class="card">', unsafe_allow_html=True)
+selected_model_id = st.selectbox(
+    "Select model",
+    models_df["model_id"],
+    format_func=lambda mid: models_df.loc[
+        models_df["model_id"] == mid, "model_name"
+    ].values[0],
+)
+st.markdown("</div>", unsafe_allow_html=True)
+
+row = models_df[models_df["model_id"] == selected_model_id].iloc[0]
+
+# ----------------------------
+# MODEL SUMMARY
+# ----------------------------
+st.markdown(
+    f"""
+    <div class="card">
+      <h3 style="margin-bottom:4px;">
+        {row['model_name']} <span class="muted">v{row['version']}</span>
+      </h3>
+      <div class="muted">
+        Algorithm: {row['algorithm']}<br>
+        Created: {row['created_at']}
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ----------------------------
+# METRICS
+# ----------------------------
+metrics_raw = row["performance_metrics"]
+metrics_valid = validate_metrics(metrics_raw)
+metrics = json.loads(metrics_raw) if metrics_valid else {}
+
+precision = f"{metrics.get('precision', 0) * 100:.1f}%" if metrics_valid else "N/A"
+recall = f"{metrics.get('recall', 0) * 100:.1f}%" if metrics_valid else "N/A"
+accuracy = f"{metrics.get('accuracy', 0) * 100:.1f}%" if metrics_valid else "N/A"
+f1 = f"{metrics.get('f1_score', 0) * 100:.1f}%" if metrics_valid else "N/A"
+
+c1, c2, c3, c4 = st.columns(4, gap="large")
+with c1: kpi_card("Precision", precision)
+with c2: kpi_card("Recall", recall)
+with c3: kpi_card("Accuracy", accuracy)
+with c4: kpi_card("F1 Score", f1)
+
+# ----------------------------
+# DOWNLOAD
+# ----------------------------
+st.download_button(
+    label="📥 Download Metrics JSON",
+    data=json.dumps(metrics, indent=2),
+    file_name=f"model_{selected_model_id}_metrics.json",
+    mime="application/json",
+)
+
+# ----------------------------
+# JSON VALIDATOR
+# ----------------------------
+st.markdown(
+    """
+    <div class="card">
+      <h3>Validate Metrics JSON</h3>
+      <div class="muted">
+        Paste metrics JSON to confirm required fields.
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+user_json = st.text_area(
+    "Metrics JSON",
+    height=160,
+    label_visibility="collapsed",
+)
+
+if st.button("Validate"):
     if validate_metrics(user_json):
-        st.success("✅ Valid performance metrics JSON!")
+        st.success("✅ Valid performance metrics JSON.")
     else:
         st.error("❌ Missing required fields: precision, recall, accuracy, f1_score.")
