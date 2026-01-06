@@ -1,3 +1,11 @@
+```python
+# ============================================================
+# GA PdM Dashboard (UI Upgrade)
+# - Apple/Airbus-inspired layout: Hero → KPI strip → Hero chart → Tabs
+# - Calm design system: consistent cards, spacing, minimal color
+# - Keeps your DB restore + data logic intact
+# ============================================================
+
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -5,11 +13,171 @@ import json
 import altair as alt
 import os
 
-# === CONFIGURATION ===
+# ----------------------------
+# CONFIGURATION
+# ----------------------------
 DB_PATH = "ga_maintenance.db"
 SQL_SEED_FILE = "full_pdm_seed.sql"
 
-# === AUTOMATIC DB RESTORATION IF MISSING ===
+
+# ----------------------------
+# PAGE CONFIG
+# ----------------------------
+st.set_page_config(
+    page_title="GA Predictive Maintenance",
+    page_icon="🛩️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ----------------------------
+# GLOBAL STYLES (Design System)
+# ----------------------------
+def inject_global_styles(dark_mode: bool):
+    # Neutral, enterprise UI: consistent radius, borders, spacing.
+    # We keep color restrained; only status badges use color.
+    if dark_mode:
+        bg = "#0B0F17"
+        panel = "rgba(17,24,39,0.88)"
+        border = "rgba(255,255,255,0.08)"
+        text = "#E5E7EB"
+        muted = "rgba(229,231,235,0.70)"
+        shadow = "0 10px 30px rgba(0,0,0,0.35)"
+        input_bg = "rgba(15,23,42,0.8)"
+    else:
+        bg = "#F7F8FB"
+        panel = "rgba(255,255,255,0.92)"
+        border = "rgba(15,23,42,0.10)"
+        text = "#0F172A"
+        muted = "rgba(15,23,42,0.70)"
+        shadow = "0 10px 30px rgba(2,6,23,0.08)"
+        input_bg = "rgba(255,255,255,0.95)"
+
+    st.markdown(
+        f"""
+        <style>
+          /* Canvas */
+          .stApp {{
+            background: {bg};
+            color: {text};
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+          }}
+
+          /* Wider, product-like canvas */
+          .block-container {{
+            padding-top: 1.25rem;
+            padding-bottom: 2.0rem;
+            max-width: 1200px;
+          }}
+
+          /* Hide Streamlit chrome */
+          [data-testid="stToolbar"] {{ visibility: hidden; height: 0; }}
+          footer {{ visibility: hidden; }}
+          header {{ visibility: hidden; }}
+
+          /* Typography */
+          h1, h2, h3 {{
+            letter-spacing: -0.02em;
+          }}
+          .muted {{
+            color: {muted};
+            font-size: 0.95rem;
+            line-height: 1.35rem;
+          }}
+
+          /* Card */
+          .card {{
+            background: {panel};
+            border: 1px solid {border};
+            border-radius: 16px;
+            padding: 16px 18px;
+            box-shadow: {shadow};
+          }}
+          .card + .card {{ margin-top: 14px; }}
+
+          /* KPI card */
+          .kpiTitle {{
+            font-size: 0.88rem;
+            color: {muted};
+            margin-bottom: 6px;
+          }}
+          .kpiValue {{
+            font-size: 1.45rem;
+            font-weight: 700;
+          }}
+          .kpiSub {{
+            margin-top: 6px;
+            color: {muted};
+            font-size: 0.85rem;
+          }}
+
+          /* Badge */
+          .badge {{
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.80rem;
+            font-weight: 650;
+            color: white;
+          }}
+
+          /* Inputs */
+          [data-baseweb="select"] > div {{
+            border-radius: 12px !important;
+            background: {input_bg} !important;
+          }}
+          textarea {{
+            border-radius: 12px !important;
+          }}
+          textarea.stTextArea textarea {{
+            background: {input_bg};
+            color: {text};
+            border: 1px solid {border};
+            border-radius: 12px;
+            font-size: 14px;
+          }}
+
+          /* Buttons */
+          .stButton > button {{
+            border-radius: 12px;
+            padding: 0.55rem 0.9rem;
+            font-weight: 650;
+          }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def badge(text: str, level: str) -> str:
+    # Minimal, intentional color usage
+    colors = {
+        "ok": "#16A34A",     # green
+        "warn": "#F59E0B",   # amber
+        "crit": "#DC2626",   # red
+        "info": "#2563EB",   # blue
+    }
+    c = colors.get(level, "#64748B")
+    return f'<span class="badge" style="background:{c};">{text}</span>'
+
+
+def kpi_card(title: str, value: str, sub: str | None = None):
+    sub_html = f'<div class="kpiSub">{sub}</div>' if sub else ""
+    st.markdown(
+        f"""
+        <div class="card">
+          <div class="kpiTitle">{title}</div>
+          <div class="kpiValue">{value}</div>
+          {sub_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ----------------------------
+# AUTOMATIC DB RESTORATION IF MISSING
+# ----------------------------
 if not os.path.exists(DB_PATH):
     st.warning("Database file not found. Attempting to restore from SQL seed...")
     try:
@@ -20,8 +188,12 @@ if not os.path.exists(DB_PATH):
     except Exception as e:
         st.error(f"Database restoration failed: {e}")
 
-# === HELPER FUNCTION TO LOAD DATA FROM DB ===
-def load_df(query):
+
+# ----------------------------
+# DB HELPERS
+# ----------------------------
+@st.cache_data(show_spinner=False, ttl=60)
+def load_df(query: str) -> pd.DataFrame:
     try:
         with sqlite3.connect(DB_PATH) as conn:
             return pd.read_sql_query(query, conn)
@@ -29,226 +201,279 @@ def load_df(query):
         st.error(f"Query failed: {e}")
         return pd.DataFrame()
 
-# === VALIDATE MODEL METRICS ===
-def validate_metrics(metrics_json):
+
+def validate_metrics(metrics_json: str) -> bool:
     try:
         data = json.loads(metrics_json)
         required = ["precision", "recall", "accuracy", "f1_score"]
         return all(key in data for key in required)
-    except:
+    except Exception:
         return False
 
-# === LOAD DATA ===
-components_df = load_df("""
+
+# ----------------------------
+# SIDEBAR (Keep it simple)
+# ----------------------------
+st.sidebar.markdown("## 🛩️ GA PdM")
+dark_mode = st.sidebar.toggle("Dark mode", value=True)
+st.sidebar.markdown("---")
+st.sidebar.caption("Tip: Keep sidebar minimal (product feel).")
+
+# Apply styles after knowing dark mode
+inject_global_styles(dark_mode)
+
+
+# ----------------------------
+# LOAD DATA
+# ----------------------------
+components_df = load_df(
+    """
     SELECT component_id, tail_number, name, condition, remaining_useful_life, last_health_score
     FROM components
-""")
+"""
+)
 
-predictions_df = load_df("""
+predictions_df = load_df(
+    """
     SELECT * FROM component_predictions
     ORDER BY prediction_time DESC
-""")
+"""
+)
 
-# === DARK MODE ===
-dark_mode = st.sidebar.checkbox("🌙 Enable Dark Mode")
 
-if dark_mode:
-    background_gradient = "linear-gradient(135deg, #121212, #2c3e50)"
-    card_bg = "#1e272e"
-    text_color = "#f1f1f1"
-    metric_bg = "#34495e"
-    button_bg = "#2980b9"
+# ----------------------------
+# HERO
+# ----------------------------
+st.markdown(
+    """
+    <div style="margin-bottom: 18px;">
+      <h1 style="margin-bottom: 6px;">General Aviation Predictive Maintenance</h1>
+      <div class="muted">
+        Component-level remaining-useful-life (RUL) estimation and failure risk monitoring,
+        optimized for GA maintenance workflows.
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ----------------------------
+# SELECTOR (Hero control)
+# ----------------------------
+if components_df.empty:
+    st.error("No aircraft components available. Database may not have loaded correctly.")
+    st.stop()
+
+component_names = [f"{row['tail_number']} — {row['name']}" for _, row in components_df.iterrows()]
+component_map = {f"{row['tail_number']} — {row['name']}": row["component_id"] for _, row in components_df.iterrows()}
+
+selector_card = st.container()
+with selector_card:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### Select a component")
+    selected_component = st.selectbox("Aircraft component", component_names, label_visibility="collapsed")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+comp_id = component_map[selected_component]
+comp_data = components_df[components_df["component_id"] == comp_id].iloc[0]
+comp_preds = predictions_df[predictions_df["component_id"] == comp_id]
+
+# ----------------------------
+# COMPUTE KPIs
+# ----------------------------
+avg_conf = float(comp_preds["confidence"].mean() * 100) if not comp_preds.empty else 0.0
+avg_rul = float(comp_data["remaining_useful_life"]) if pd.notna(comp_data["remaining_useful_life"]) else 0.0
+health_score = int(comp_data["last_health_score"]) if pd.notna(comp_data["last_health_score"]) else 0
+
+crit = pd.DataFrame()
+if not comp_preds.empty:
+    crit = comp_preds[(comp_preds["prediction_type"] == "failure") & (comp_preds["confidence"] > 0.9)]
+crit_count = int(crit.shape[0])
+
+condition = str(comp_data["condition"]) if pd.notna(comp_data["condition"]) else "unknown"
+
+# Status determination (simple)
+if crit_count > 0:
+    status_level = "crit"
+    status_text = "Critical risk detected"
+elif health_score < 60:
+    status_level = "warn"
+    status_text = "Degraded health"
 else:
-    background_gradient = "linear-gradient(135deg, #e8f0f8, #ffffff)"
-    card_bg = "#ffffff"
-    text_color = "#333333"
-    metric_bg = "#00796b"
-    button_bg = "#1565c0"
+    status_level = "ok"
+    status_text = "Normal"
 
-st.markdown(f"""
-<style>
-.stApp {{
-    background: {background_gradient};
-    font-family: 'Segoe UI', sans-serif;
-    color: {text_color};
-}}
-.header-bar {{
-    background: {metric_bg};
-    padding: 15px;
-    border-radius: 10px;
-    color: white;
-    font-size: 26px;
-    font-weight: bold;
-    text-align: center;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
-}}
-.card {{
-    background: {card_bg};
-    color: {text_color};
-    padding: 15px;
-    border-radius: 12px;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.2);
-    margin-bottom: 15px;
-}}
-.metric-card {{
-    background: {metric_bg};
-    padding: 12px;
-    border-radius: 10px;
-    color: #ffffff;
-    text-align: center;
-    box-shadow: 0 6px 15px rgba(0,0,0,0.3);
-}}
-.stButton > button {{
-    background-color: {button_bg};
-    color: white;
-    font-weight: bold;
-    border: none;
-    border-radius: 5px;
-    padding: 6px 12px;
-}}
-.stButton > button:hover {{
-    background-color: #004d99;
-}}
-textarea.stTextArea textarea {{
-    background-color: {"#2c3e50" if dark_mode else "#ffffff"};
-    color: {"#f1f1f1" if dark_mode else "#333333"};
-    border: 1px solid #888;
-    border-radius: 5px;
-    font-size: 14px;
-}}
-</style>
-""", unsafe_allow_html=True)
+# ----------------------------
+# KPI STRIP (Consistent cards)
+# ----------------------------
+k1, k2, k3, k4 = st.columns(4, gap="large")
 
-st.markdown('<div class="header-bar">General Aviation Predictive Maintenance Dashboard</div>', unsafe_allow_html=True)
+with k1:
+    kpi_card("Remaining Useful Life", f"{avg_rul:.1f} h", f"Condition: {condition}")
 
-# === SELECTOR ===
-component_names = [f"{row['tail_number']} - {row['name']}" for _, row in components_df.iterrows()]
-component_map = {f"{row['tail_number']} - {row['name']}": row['component_id'] for _, row in components_df.iterrows()}
+with k2:
+    kpi_card("Health Score", f"{health_score}", f"Status: {status_text}")
 
-if component_names:
-    selected_component = st.selectbox("Select Aircraft Component:", component_names)
-    comp_id = component_map[selected_component]
-    comp_data = components_df[components_df['component_id'] == comp_id].iloc[0]
-    comp_preds = predictions_df[predictions_df['component_id'] == comp_id]
+with k3:
+    kpi_card("Avg Confidence", f"{avg_conf:.1f}%", "Across latest predictions")
 
-    col1, col2 = st.columns([2,1])
+with k4:
+    kpi_card("Critical Alerts", f"{crit_count}", "Confidence > 90%")
 
-    with col1:
-        st.markdown(f"""
-        <div class="card" style=background:#3b5998; color:white;">
-        <h4 style="color:white; font-weight:700; margin-bottom:10px;">{selected_component}</h4>
-        <b>Condition:</b> {comp_data['condition']}<br>
-        <b>Remaining Useful Life:</b> {comp_data['remaining_useful_life']:.2f} hours<br>
-        <b>Health Score:</b> {comp_data['last_health_score']}
-        </div>
-        """, unsafe_allow_html=True)
 
-        crit = comp_preds[(comp_preds['prediction_type'] == 'failure') & (comp_preds['confidence'] > 0.9)]
-        if not crit.empty:
-            row = crit.iloc[0]
-            st.markdown(f"""
-            <div class="card" style="background:#e53935; color:white;">
-            <b>⚠ Critical Alert</b><br>
-            Predicted Failure: {row['time_horizon']}<br>
-            Confidence: {row['confidence']*100:.1f}%<br>
-            Explanation: {row['explanation']}
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class="card" style="background:#43a047; color:white;">
-            <b>No Critical Alerts</b>
-            </div>
-            """, unsafe_allow_html=True)
+# ----------------------------
+# PRIMARY SECTION (Hero chart + status)
+# ----------------------------
+left, right = st.columns([2.2, 1], gap="large")
 
-        # Altair chart
-        if not comp_preds.empty:
-            alt_data = comp_preds[comp_preds['prediction_type'] == 'remaining_life']
-            if not alt_data.empty:
-                alt_data['prediction_time'] = pd.to_datetime(alt_data['prediction_time'])
-                chart = alt.Chart(alt_data).mark_line(point=True).encode(
-                    x=alt.X('prediction_time:T', title='Prediction Time'),
-                    y=alt.Y('predicted_value:Q', title='Remaining Useful Life (hrs)'),
-                    tooltip=['prediction_time:T', 'predicted_value', 'confidence']
-                ).properties(
-                    title="Remaining Useful Life Over Time",
-                    width=600,
-                    height=300
+with left:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### RUL trend")
+
+    if not comp_preds.empty:
+        alt_data = comp_preds[comp_preds["prediction_type"] == "remaining_life"].copy()
+        if not alt_data.empty:
+            alt_data["prediction_time"] = pd.to_datetime(alt_data["prediction_time"])
+            chart = (
+                alt.Chart(alt_data)
+                .mark_line(point=True)
+                .encode(
+                    x=alt.X("prediction_time:T", title="Time"),
+                    y=alt.Y("predicted_value:Q", title="RUL (hours)"),
+                    tooltip=[
+                        alt.Tooltip("prediction_time:T", title="Time"),
+                        alt.Tooltip("predicted_value:Q", title="RUL"),
+                        alt.Tooltip("confidence:Q", title="Confidence", format=".2f"),
+                    ],
                 )
-                st.altair_chart(chart, use_container_width=True)
-            else:
-                st.info("No remaining life predictions available for Altair chart.")
-
-    with col2:
-        avg_conf = comp_preds['confidence'].mean() * 100 if not comp_preds.empty else 0
-        crit_count = crit.shape[0]
-        avg_rul = comp_data['remaining_useful_life']
-
-        st.markdown(f"""
-        <div class="metric-card">
-        <b>Avg Confidence</b><br>
-        <span style="font-size:22px;">{avg_conf:.1f}%</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"""
-        <div class="metric-card" style="background:#c62828;">
-        <b>Critical Failures</b><br>
-        <span style="font-size:22px;">{crit_count}</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"""
-        <div class="metric-card" style="background:#1565c0;">
-        <b>Remaining Useful Life</b><br>
-        <span style="font-size:22px;">{avg_rul:.2f}h</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Performance metrics
-        if not comp_preds.empty:
-            selected_model_id = comp_preds['model_id'].iloc[0]
-            metrics_df = load_df(f"""
-                SELECT performance_metrics FROM predictive_models
-                WHERE model_id = {selected_model_id}
-            """)
-            if not metrics_df.empty and metrics_df['performance_metrics'].iloc[0]:
-                metrics_json = metrics_df['performance_metrics'].iloc[0]
-                if validate_metrics(metrics_json):
-                    metrics = json.loads(metrics_json)
-                    precision = f"{metrics.get('precision', 0) * 100:.1f}%"
-                    recall = f"{metrics.get('recall', 0) * 100:.1f}%"
-                    accuracy = f"{metrics.get('accuracy', 0) * 100:.1f}%"
-                    f1_score = f"{metrics.get('f1_score', 0) * 100:.1f}%"
-                else:
-                    precision = recall = accuracy = f1_score = "N/A"
-                    st.warning("⚠ Invalid performance metrics.")
-            else:
-                precision = recall = accuracy = f1_score = "N/A"
-
-            st.markdown(f"""
-            <div class="card" style="background:{metric_bg}; color:white;">
-            <b>Model Performance</b><br>
-            Precision: {precision} | Recall: {recall} | Accuracy: {accuracy} | F1: {f1_score}
-            </div>
-            """, unsafe_allow_html=True)
-
-else:
-    st.warning("⚠ No aircraft components available. Database may not have loaded correctly.")
-
-# === JSON validator ===
-st.markdown("---")
-st.markdown(f"""
-<div class="card">
-<h4 style="margin-bottom:10px;">Test Performance Metrics JSON</h4>
-</div>
-""", unsafe_allow_html=True)
-
-input_metrics = st.text_area("Enter Performance Metrics JSON:", height=150)
-
-if st.button("Validate JSON"):
-    if validate_metrics(input_metrics):
-        st.success("✅ Valid performance metrics JSON!")
+                .properties(height=360)
+            )
+            st.altair_chart(chart, use_container_width=True)
+        else:
+            st.info("No remaining life predictions available.")
     else:
-        st.error("❌ Invalid or missing required fields (precision, recall, accuracy, f1_score).")
+        st.info("No predictions available for this component yet.")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with right:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### Component summary")
+    st.markdown(f"**{selected_component}**")
+    st.markdown(f"Tail/component condition: **{condition}**")
+    st.markdown(f"Overall status: {badge(status_text, status_level)}", unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("### Alerts")
+
+    if not crit.empty:
+        row = crit.iloc[0]
+        # Keep this clean: short explanation preview
+        explanation = str(row.get("explanation", "") or "")
+        explanation_preview = explanation if len(explanation) <= 180 else explanation[:180] + "…"
+        st.markdown(badge("Critical", "crit") + " " + "**Failure predicted**", unsafe_allow_html=True)
+        st.markdown(f"- Horizon: **{row.get('time_horizon', 'N/A')}**")
+        st.markdown(f"- Confidence: **{float(row.get('confidence', 0))*100:.1f}%**")
+        if explanation_preview.strip():
+            st.markdown(f"- Notes: {explanation_preview}")
+    else:
+        st.markdown(badge("Normal", "ok") + " No critical alerts found.", unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ----------------------------
+# DETAILS (Tabs)
+# ----------------------------
+tabs = st.tabs(["Trends", "Alerts", "Maintenance", "Model", "JSON Validator"])
+
+with tabs[0]:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### Recent predictions (latest 25)")
+    if comp_preds.empty:
+        st.info("No predictions available.")
+    else:
+        show = comp_preds.head(25).copy()
+        # Keep it readable
+        cols = [c for c in ["prediction_time", "prediction_type", "predicted_value", "confidence", "time_horizon"] if c in show.columns]
+        st.dataframe(show[cols], use_container_width=True, hide_index=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with tabs[1]:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### Alerts")
+    if comp_preds.empty:
+        st.info("No alerts available.")
+    else:
+        failures = comp_preds[comp_preds["prediction_type"] == "failure"].copy()
+        if failures.empty:
+            st.markdown(badge("Normal", "ok") + " No failure predictions.", unsafe_allow_html=True)
+        else:
+            failures["prediction_time"] = pd.to_datetime(failures["prediction_time"], errors="coerce")
+            failures = failures.sort_values("prediction_time", ascending=False).head(50)
+            st.dataframe(
+                failures[["prediction_time", "confidence", "time_horizon", "explanation"]],
+                use_container_width=True,
+                hide_index=True,
+            )
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with tabs[2]:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### Maintenance (placeholder)")
+    st.caption("If you already have preventive tasks page, link or render it here.")
+    st.markdown("- Show due tasks\n- Recommend inspections/actions by RUL thresholds\n- Display last service events")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with tabs[3]:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### Model performance")
+
+    precision = recall = accuracy = f1_score = "N/A"
+
+    if not comp_preds.empty and "model_id" in comp_preds.columns:
+        selected_model_id = comp_preds["model_id"].iloc[0]
+        metrics_df = load_df(
+            f"""
+            SELECT performance_metrics FROM predictive_models
+            WHERE model_id = {int(selected_model_id)}
+            """
+        )
+        if not metrics_df.empty and metrics_df["performance_metrics"].iloc[0]:
+            metrics_json = metrics_df["performance_metrics"].iloc[0]
+            if validate_metrics(metrics_json):
+                metrics = json.loads(metrics_json)
+                precision = f"{metrics.get('precision', 0) * 100:.1f}%"
+                recall = f"{metrics.get('recall', 0) * 100:.1f}%"
+                accuracy = f"{metrics.get('accuracy', 0) * 100:.1f}%"
+                f1_score = f"{metrics.get('f1_score', 0) * 100:.1f}%"
+            else:
+                st.warning("Invalid performance metrics JSON. Required: precision, recall, accuracy, f1_score")
+
+    c1, c2, c3, c4 = st.columns(4, gap="large")
+    with c1: kpi_card("Precision", precision)
+    with c2: kpi_card("Recall", recall)
+    with c3: kpi_card("Accuracy", accuracy)
+    with c4: kpi_card("F1 Score", f1_score)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with tabs[4]:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### Test performance metrics JSON")
+    st.caption("Paste JSON containing precision, recall, accuracy, f1_score and validate it.")
+
+    input_metrics = st.text_area("Performance Metrics JSON", height=160, label_visibility="collapsed")
+
+    colA, colB = st.columns([1, 5])
+    with colA:
+        validate_btn = st.button("Validate")
+
+    if validate_btn:
+        if validate_metrics(input_metrics):
+            st.success("✅ Valid performance metrics JSON.")
+        else:
+            st.error("❌ Invalid JSON or missing required fields: precision, recall, accuracy, f1_score.")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+```
