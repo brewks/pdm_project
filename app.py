@@ -91,7 +91,7 @@ def to_float_or_none(x):
 
 def fmt_int_or_dash(x):
     v = to_float_or_none(x)
-    return "—" if v is None else {health_text}
+    return "—" if v is None else str{int(round(avg_health))}
 
 # ----------------------------
 # STYLES (YOUR FUNCTION + 2 TINY FIXES)
@@ -923,6 +923,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
