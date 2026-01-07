@@ -8,6 +8,8 @@ import altair as alt
 
 import math
 
+from utils import inject_global_styles, badge
+
 # ----------------------------
 # CONFIG
 # ----------------------------
@@ -96,214 +98,10 @@ def fmt_int_or_dash(x):
 # ----------------------------
 # STYLES
 # ----------------------------
-def inject_global_styles(dark_mode: bool):
-    if dark_mode:
-        bg = "#0B1220"
-        bg2 = "#0E172A"
-        panel = "rgba(17, 27, 47, 0.86)"
-        border = "rgba(148, 163, 184, 0.14)"
-        text = "rgba(226, 232, 240, 0.92)"
-        muted = "rgba(226, 232, 240, 0.68)"
-        shadow = "0 10px 28px rgba(0,0,0,0.35)"
-        input_bg = "rgba(15, 23, 42, 0.75)"
-        accent = "#5AA2FF"
-        grid = "rgba(148, 163, 184, 0.10)"
-        sidebar_bg = "linear-gradient(180deg, #081024 0%, #0B1220 100%)"
-        sidebar_border = "1px solid rgba(148,163,184,0.12)"
-    else:
-        bg = "#F3F6FB"
-        bg2 = "#EEF3FA"
-        panel = "rgba(255, 255, 255, 0.92)"
-        border = "rgba(15, 23, 42, 0.10)"
-        text = "rgba(15, 23, 42, 0.92)"
-        muted = "rgba(15, 23, 42, 0.65)"
-        shadow = "0 10px 26px rgba(2, 6, 23, 0.08)"
-        input_bg = "rgba(255, 255, 255, 0.96)"
-        accent = "#1F6FEB"
-        grid = "rgba(15, 23, 42, 0.08)"
-        sidebar_bg = "linear-gradient(180deg, #F7FAFF 0%, #F3F6FB 100%)"
-        sidebar_border = "1px solid rgba(2,6,23,0.10)"
-
-    st.markdown(
-        f"""
-        <style>
-          :root {{
-            --bg: {bg};
-            --bg2: {bg2};
-            --panel: {panel};
-            --border: {border};
-            --text: {text};
-            --muted: {muted};
-            --shadow: {shadow};
-            --input: {input_bg};
-            --accent: {accent};
-            --grid: {grid};
-          }}
-
-          .stApp {{
-            background: radial-gradient(1200px 600px at 20% 0%, var(--bg2), var(--bg));
-            color: var(--text);
-            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-          }}
-
-          .block-container {{
-            padding-top: 1.0rem;
-            padding-bottom: 1.6rem;
-            max-width: 96vw;
-            padding-left: 2.0rem;
-            padding-right: 2.0rem;
-          }}
-
-          [data-testid="stToolbar"] {{ visibility: hidden; height: 0; }}
-          footer {{ visibility: hidden; }}
-          header {{ visibility: hidden; }}
-
-          section[data-testid="stSidebar"] {{
-            background: {sidebar_bg};
-            border-right: {sidebar_border};
-          }}
-
-          section[data-testid="stSidebar"] .block-container {{
-            padding-top: 1.0rem;
-          }}
-
-          section[data-testid="stSidebar"] * {{
-            color: var(--text) !important;
-          }}
-
-          section[data-testid="stSidebar"] .stCaption,
-          section[data-testid="stSidebar"] small,
-          section[data-testid="stSidebar"] label {{
-            color: var(--muted) !important;
-          }}
-
-          section[data-testid="stSidebar"] [data-baseweb="select"] * {{
-            color: var(--text) !important;
-          }}
-          section[data-testid="stSidebar"] [data-baseweb="select"] input {{
-            -webkit-text-fill-color: var(--text) !important;
-            caret-color: var(--text) !important;
-          }}
-
-          h1, h2, h3 {{ letter-spacing: -0.02em; }}
-          .muted {{
-            color: var(--muted);
-            font-size: 0.95rem;
-            line-height: 1.35rem;
-          }}
-
-          .card {{
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 16px 18px;
-            box-shadow: var(--shadow);
-            backdrop-filter: blur(8px);
-          }}
-
-          .card.kpi {{
-            padding: 18px 20px;
-            min-height: 104px;
-          }}
-          .kpiTitle {{
-            font-size: 0.88rem;
-            color: var(--muted);
-            margin-bottom: 6px;
-          }}
-          .kpiValue {{
-            font-size: 1.70rem;
-            font-weight: 850;
-            color: var(--text);
-          }}
-          .kpiSub {{
-            margin-top: 8px;
-            color: var(--muted);
-            font-size: 0.88rem;
-          }}
-
-          .badge {{
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 999px;
-            font-size: 0.80rem;
-            font-weight: 850;
-            color: white;
-          }}
-
-          [data-baseweb="select"] > div {{
-            border-radius: 12px !important;
-            background: var(--input) !important;
-            border: 1px solid var(--border) !important;
-          }}
-          [data-baseweb="input"] > div {{
-            border-radius: 12px !important;
-            background: var(--input) !important;
-            border: 1px solid var(--border) !important;
-          }}
-
-          .stButton > button {{
-            border-radius: 12px;
-            padding: 0.55rem 0.9rem;
-            font-weight: 850;
-            border: 1px solid var(--border);
-            background: var(--accent);
-            color: white;
-          }}
-          .stButton > button:hover {{
-            filter: brightness(0.96);
-          }}
-
-          .gaugeWrap {{
-            display:flex;
-            gap:12px;
-            align-items:center;
-          }}
-          .gauge {{
-            width: 84px;
-            height: 84px;
-            border-radius: 50%;
-            background:
-              conic-gradient(var(--accent) var(--deg), rgba(148,163,184,0.18) 0);
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            border: 1px solid var(--border);
-            box-shadow: var(--shadow);
-          }}
-          .gaugeInner {{
-            width: 66px;
-            height: 66px;
-            border-radius: 50%;
-            background: var(--panel);
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            flex-direction:column;
-          }}
-          .gaugeVal {{
-            font-weight: 900;
-            font-size: 1.05rem;
-            color: var(--text);
-            line-height: 1.1rem;
-          }}
-          .gaugeLbl {{
-            font-size: 0.72rem;
-            color: var(--muted);
-            margin-top: 2px;
-          }}
-
-          [data-testid="stHorizontalBlock"] {{
-            gap: 0.95rem;
-          }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def badge(label: str, color: str) -> str:
     return f'<span class="badge" style="background:{color};">{label}</span>'
-
 
 # ----------------------------
 # DATA LOADERS
@@ -756,3 +554,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
