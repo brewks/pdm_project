@@ -151,6 +151,47 @@ def inject_global_styles(dark_mode: bool):
             border-right: {sidebar_border};
           }}
 
+          /* -----------------------------
+             SIDEBAR TEXT FIX (light mode)
+             ----------------------------- */
+
+          /* Force all sidebar text to be readable */
+          section[data-testid="stSidebar"] * {{
+            color: var(--text) !important;
+          }}
+
+          /* Muted sidebar captions / helper text */
+          section[data-testid="stSidebar"] .stCaption,
+          section[data-testid="stSidebar"] small,
+          section[data-testid="stSidebar"] label {{
+            color: var(--muted) !important;
+          }}
+
+          /* Radio / checkbox / toggle labels */
+          section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+          section[data-testid="stSidebar"] [role="radiogroup"] *,
+          section[data-testid="stSidebar"] [data-testid="stCheckbox"] *,
+          section[data-testid="stSidebar"] [data-testid="stToggle"] * {{
+            color: var(--text) !important;
+          }}
+
+          /* Selectbox input text */
+          section[data-testid="stSidebar"] [data-baseweb="select"] * {{
+            color: var(--text) !important;
+          }}
+
+          /* Fix the selectbox placeholder in light mode */
+          section[data-testid="stSidebar"] [data-baseweb="select"] input {{
+            -webkit-text-fill-color: var(--text) !important;
+            caret-color: var(--text) !important;
+          }}
+
+          /* Slider labels + values */
+          section[data-testid="stSidebar"] [data-testid="stSlider"] * {{
+            color: var(--text) !important;
+          }}
+
+          
           h1, h2, h3 {{ letter-spacing: -0.02em; }}
           .muted {{
             color: var(--muted);
@@ -860,3 +901,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
