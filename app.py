@@ -177,6 +177,8 @@ def inject_global_styles(dark_mode: bool):
              SIDEBAR TEXT FIX (light mode)
              ----------------------------- */
 
+          st.page_link("pages/01_Maintenance_Tasks.py", label="Open Maintenance Tasks", icon="🛠️")
+
           /* Force all sidebar text to be readable */
           section[data-testid="stSidebar"] * {{
             color: var(--text) !important;
@@ -923,6 +925,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
