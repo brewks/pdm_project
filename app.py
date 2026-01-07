@@ -176,7 +176,9 @@ def inject_global_styles(dark_mode: bool):
           /* -----------------------------
              SIDEBAR TEXT FIX (light mode)
              ----------------------------- */
-      
+
+          st.page_link("pages/01_Maintenance_Tasks.py", label="Open Maintenance Tasks", icon="🛠️")
+
           /* Force all sidebar text to be readable */
           section[data-testid="stSidebar"] * {{
             color: var(--text) !important;
@@ -725,67 +727,31 @@ def main():
     snapshot = get_dashboard_snapshot()
     top_kpi_strip(snapshot, tail)
 
-    # ----------------------------
-    # AIRCRAFT + COMPONENT SELECTOR (2-step, human-factors safe)
-    # ----------------------------
-
-    # Step 1: Aircraft (tail) selection
-    all_components = get_components(None)
-    if all_components.empty:
-        st.markdown(
-            '<div class="card"><div class="kpiTitle">No components</div>'
-            '<div class="kpiSub">No component records found in the system.</div></div>',
-            unsafe_allow_html=True,
-        )
-        return
-
-    tail_numbers = sorted(all_components["tail_number"].dropna().unique().tolist())
-    selected_tail = st.selectbox("Aircraft (tail number)", ["All"] + tail_numbers, index=0)
-
-    # Step 2: Component list filtered by aircraft
-    comps = get_components(None if selected_tail == "All" else selected_tail)
+    # Component selector (NO label->id dict => NO KeyError)
+    comps = get_components(tail)
     if comps.empty:
-        st.markdown(
-            '<div class="card"><div class="kpiTitle">No components</div>'
-            '<div class="kpiSub">No components found for the selected aircraft.</div></div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div class="card"><div class="kpiTitle">No components</div><div class="kpiSub">No component records found for the selected aircraft.</div></div>', unsafe_allow_html=True)
         return
 
-    # Optional: component type filter (very helpful in GA)
-    types = sorted(comps["type"].dropna().unique().tolist())
-    selected_type = st.selectbox("Component category", ["All"] + types, index=0)
+    # Build labels for display only
+    comps = comps.copy()
+    comps["label"] = comps.apply(lambda r: f"{r['tail_number']} • {r['type']} • {r['name']} #{r['component_id']}", axis=1)
 
-    if selected_type != "All":
-        comps = comps[comps["type"] == selected_type].copy()
-
-    # Reset index so we can safely select by row
-    comps = comps.reset_index(drop=True)
-
-    def component_label(i: int) -> str:
-        r = comps.loc[i]
-        typ = str(r["type"]).replace("_", " ").title()
-        name = str(r["name"])
-        if selected_tail == "All":
-            return f"{r['tail_number']} • {typ} • {name}  (#{int(r['component_id'])})"
-        return f"{typ} • {name}  (#{int(r['component_id'])})"
+    comp_ids = comps["component_id"].tolist()
 
     left, right = st.columns([1.55, 1.0], gap="large")
 
-        with left:
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.markdown("<div class='kpiTitle'>Component</div>", unsafe_allow_html=True)
+    with left:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("<div class='kpiTitle'>Component</div>", unsafe_allow_html=True)
 
-        selected_idx = st.selectbox(
+        selected_comp_id = st.selectbox(
             " ",
-            options=list(range(len(comps))),
-            format_func=component_label,
+            options=comp_ids,
+            format_func=lambda cid: comps.loc[comps["component_id"] == cid, "label"].iloc[0],
             label_visibility="collapsed",
         )
-
         st.markdown("</div>", unsafe_allow_html=True)
-
-        selected_comp_id = int(comps.loc[selected_idx, "component_id"])
 
         # RUL trend
         series = get_rul_series(int(selected_comp_id))
@@ -959,9 +925,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
 
 
 
