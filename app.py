@@ -151,6 +151,11 @@ def inject_global_styles(dark_mode: bool):
             border-right: {sidebar_border};
           }}
 
+          /* Sidebar spacing + cleaner look */
+         section[data-testid="stSidebar"] .block-container {
+         padding-top: 1.0rem;
+         }
+         
           /* -----------------------------
              SIDEBAR TEXT FIX (light mode)
              ----------------------------- */
@@ -901,4 +906,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
