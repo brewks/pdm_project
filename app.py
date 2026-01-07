@@ -8,22 +8,6 @@ import altair as alt
 
 import math
 
-def to_float_or_none(x):
-    try:
-        if x is None:
-            return None
-        v = float(x)
-        if math.isnan(v) or math.isinf(v):
-            return None
-        return v
-    except Exception:
-        return None
-
-def fmt_int_or_dash(x):
-    v = to_float_or_none(x)
-    return "—" if v is None else str(int(round(v)))
-
-
 # ----------------------------
 # CONFIG
 # ----------------------------
@@ -92,6 +76,22 @@ def safe_float(x, default=0.0) -> float:
     except Exception:
         return default
 
+
+def to_float_or_none(x):
+    try:
+        if x is None:
+            return None
+        v = float(x)
+        if math.isnan(v) or math.isinf(v):
+            return None
+        return v
+    except Exception:
+        return None
+        
+
+def fmt_int_or_dash(x):
+    v = to_float_or_none(x)
+    return "—" if v is None else str(int(round(v)))
 
 # ----------------------------
 # STYLES (YOUR FUNCTION + 2 TINY FIXES)
@@ -923,6 +923,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
