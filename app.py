@@ -53,7 +53,6 @@ def read_sql(query: str, params: tuple = ()) -> pd.DataFrame:
     try:
         return pd.read_sql_query(query, get_conn(), params=params)
     except Exception as e:
-        # Streamlit cloud redacts details in UI; show a clean “what to check”.
         st.error("Database query failed. Check that your DB schema matches the expected tables/views.")
         st.caption(f"Details: {type(e).__name__}")
         return pd.DataFrame()
@@ -87,11 +86,12 @@ def to_float_or_none(x):
         return v
     except Exception:
         return None
-        
+
 
 def fmt_int_or_dash(x):
     v = to_float_or_none(x)
-    return "—" if v is None else str(int(round(avg_health)))
+    return "—" if v is None else str(int(round(v)))
+
 
 # ----------------------------
 # STYLES (YOUR FUNCTION + 2 TINY FIXES)
@@ -169,15 +169,9 @@ def inject_global_styles(dark_mode: bool):
           }}
 
           /* Sidebar spacing + cleaner look */
-         section[data-testid="stSidebar"] .block-container {{
+          section[data-testid="stSidebar"] .block-container {{
             padding-top: 1.0rem;
           }}
-         
-          /* -----------------------------
-             SIDEBAR TEXT FIX (light mode)
-             ----------------------------- */
-
-          st.page_link("pages/01_Maintenance_Tasks.py", label="Open Maintenance Tasks", icon="🛠️")
 
           /* Force all sidebar text to be readable */
           section[data-testid="stSidebar"] * {{
@@ -191,31 +185,15 @@ def inject_global_styles(dark_mode: bool):
             color: var(--muted) !important;
           }}
 
-          /* Radio / checkbox / toggle labels */
-          section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
-          section[data-testid="stSidebar"] [role="radiogroup"] *,
-          section[data-testid="stSidebar"] [data-testid="stCheckbox"] *,
-          section[data-testid="stSidebar"] [data-testid="stToggle"] * {{
-            color: var(--text) !important;
-          }}
-
           /* Selectbox input text */
           section[data-testid="stSidebar"] [data-baseweb="select"] * {{
             color: var(--text) !important;
           }}
-
-          /* Fix the selectbox placeholder in light mode */
           section[data-testid="stSidebar"] [data-baseweb="select"] input {{
             -webkit-text-fill-color: var(--text) !important;
             caret-color: var(--text) !important;
           }}
 
-          /* Slider labels + values */
-          section[data-testid="stSidebar"] [data-testid="stSlider"] * {{
-            color: var(--text) !important;
-          }}
-
-          
           h1, h2, h3 {{ letter-spacing: -0.02em; }}
           .muted {{
             color: var(--muted);
@@ -354,7 +332,6 @@ def gauge_html(title: str, value: float, label: str, pct_0_to_100: bool = True) 
         shown = f"{int(round(v))}"
         sub = label
     else:
-        # for non-percent, show numeric and still map to 0..100 for ring if needed externally
         v = value
         deg = 0
         shown = f"{v:.0f}"
@@ -442,7 +419,6 @@ def get_rul_series(component_id: int) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def get_latest_prediction_with_rpn(component_id: int) -> pd.DataFrame:
-    # Uses the view you created in schm_tbls.txt
     if table_exists("component_predictions_with_rpn"):
         return read_sql(
             """
@@ -455,7 +431,6 @@ def get_latest_prediction_with_rpn(component_id: int) -> pd.DataFrame:
             (component_id,),
         )
 
-    # fallback: no view
     return read_sql(
         """
         SELECT prediction_id, component_id, model_id, prediction_time, prediction_type, predicted_value, confidence, time_horizon
@@ -493,11 +468,6 @@ def get_model_label(model_id: int) -> str:
 # RISK LOGIC (PILOT-FRIENDLY)
 # ----------------------------
 def compute_risk_label(open_alerts: pd.DataFrame, health: float, rul_hours: float, rpn_val: Optional[float]) -> Tuple[str, str]:
-    """
-    Returns (risk_label, color).
-    Priority: alerts -> RPN -> health/rul.
-    """
-    # Alerts dominate
     if not open_alerts.empty:
         sev = open_alerts["severity"].astype(str).str.lower().tolist()
         if "critical" in sev:
@@ -506,7 +476,6 @@ def compute_risk_label(open_alerts: pd.DataFrame, health: float, rul_hours: floa
             return "Medium", "#2563EB"
         return "Low", "#16A34A"
 
-    # RPN thresholds (typical FMEA ranges; keep simple)
     if rpn_val is not None:
         if rpn_val >= 200:
             return "High", "#DC2626"
@@ -514,7 +483,6 @@ def compute_risk_label(open_alerts: pd.DataFrame, health: float, rul_hours: floa
             return "Medium", "#2563EB"
         return "Low", "#16A34A"
 
-    # Health / RUL fallback
     if health < 60 or (rul_hours is not None and rul_hours < 25):
         return "High", "#DC2626"
     if health < 75 or (rul_hours is not None and rul_hours < 75):
@@ -526,11 +494,12 @@ def compute_risk_label(open_alerts: pd.DataFrame, health: float, rul_hours: floa
 # UI SECTIONS
 # ----------------------------
 def top_kpi_strip(snapshot: pd.DataFrame, tail_filter: str):
-    """
-    Top strip for quick “fleet awareness”.
-    """
     if snapshot.empty:
-        st.markdown('<div class="card kpi"><div class="kpiTitle">Fleet</div><div class="kpiValue">No snapshot data</div><div class="kpiSub">dashboard_snapshot_view not available</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="card kpi"><div class="kpiTitle">Fleet</div><div class="kpiValue">No snapshot data</div>'
+            '<div class="kpiSub">dashboard_snapshot_view not available</div></div>',
+            unsafe_allow_html=True,
+        )
         return
 
     df = snapshot.copy()
@@ -538,22 +507,28 @@ def top_kpi_strip(snapshot: pd.DataFrame, tail_filter: str):
         df = df[df["tail_number"] == tail_filter]
 
     active_alerts = int(df["active_alerts"].fillna(0).sum()) if "active_alerts" in df.columns else 0
-    # Worst status across filtered aircraft
+
     status_rank = {"maintenance_required": 4, "attention_needed": 3, "monitoring": 2, "normal": 1}
     worst = "normal"
     if "predictive_status" in df.columns and not df["predictive_status"].isna().all():
         worst = max(df["predictive_status"].astype(str).str.lower().tolist(), key=lambda x: status_rank.get(x, 0))
 
-    # Average health score
-    avg_health = safe_float(df["health_score"].dropna().mean(), 0.0) if "health_score" in df.columns else 0.0
+    # Robust average health
+    avg_health = None
+    if "health_score" in df.columns:
+        hs = pd.to_numeric(df["health_score"], errors="coerce")
+        if hs.notna().any():
+            avg_health = float(hs.mean())
 
-    # Last analysis time
+    avg_health_text = fmt_int_or_dash(avg_health)
+    avg_health_val = 0.0 if to_float_or_none(avg_health) is None else float(avg_health)
+    avg_health_val = max(0.0, min(100.0, avg_health_val))
+
     last_ts = ""
     if "last_prediction_time" in df.columns:
         s = df["last_prediction_time"].dropna()
         last_ts = str(s.max()) if not s.empty else ""
 
-    # Status badge
     if worst in ("maintenance_required",):
         status_badge = badge("Maintenance required", "#DC2626")
     elif worst in ("attention_needed",):
@@ -578,15 +553,14 @@ def top_kpi_strip(snapshot: pd.DataFrame, tail_filter: str):
         )
 
     with c2:
-        # avg health gauge
         st.markdown(
             f"""
             <div class="card kpi">
               <div class="kpiTitle">Average health</div>
               <div class="gaugeWrap">
-                <div class="gauge" style="--deg:{int((max(0,min(100,avg_health))/100)*360)}deg;">
+                <div class="gauge" style="--deg:{int((avg_health_val/100)*360)}deg;">
                   <div class="gaugeInner">
-                    <div class="gaugeVal">{int(round(avg_health))}</div>
+                    <div class="gaugeVal">{avg_health_text}</div>
                     <div class="gaugeLbl">0–100</div>
                   </div>
                 </div>
@@ -626,7 +600,10 @@ def top_kpi_strip(snapshot: pd.DataFrame, tail_filter: str):
 
 def rul_trend_chart(series: pd.DataFrame, dark_mode: bool):
     if series.empty:
-        st.markdown('<div class="card"><div class="kpiTitle">RUL trend</div><div class="kpiSub">No RUL history for this component.</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="card"><div class="kpiTitle">RUL trend</div><div class="kpiSub">No RUL history for this component.</div></div>',
+            unsafe_allow_html=True,
+        )
         return
 
     df = series.copy()
@@ -668,7 +645,6 @@ def render_open_alerts(alerts_df: pd.DataFrame):
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    # Small, readable list
     for _, r in alerts_df.iterrows():
         sev = str(r.get("severity", "")).lower()
         if sev == "critical":
@@ -700,6 +676,13 @@ def main():
     dark_mode = st.sidebar.toggle("Dark mode", value=True)
     inject_global_styles(dark_mode)
 
+    # Optional: link to maintenance tasks (must be OUTSIDE CSS)
+    # If your Streamlit version supports it, this will work:
+    try:
+        st.sidebar.page_link("pages/01_Maintenance_Tasks.py", label="Maintenance Tasks", icon="🛠️")
+    except Exception:
+        st.sidebar.caption("🛠️ Maintenance Tasks (use sidebar page list)")
+
     mode = st.sidebar.radio(
         "View",
         ["Pilot / Operator", "Maintenance / Engineer"],
@@ -710,7 +693,7 @@ def main():
     tail_options = ["All"] + (aircraft_df["tail_number"].tolist() if not aircraft_df.empty else [])
     tail = st.sidebar.selectbox("Aircraft (tail number)", tail_options, index=0)
 
-    # Header (clean, no fluff)
+    # Header
     st.markdown(
         """
         <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:14px;">
@@ -723,21 +706,48 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # Top KPI strip (fleet-level)
+    # Top KPI strip
     snapshot = get_dashboard_snapshot()
     top_kpi_strip(snapshot, tail)
 
-    # Component selector (NO label->id dict => NO KeyError)
-    comps = get_components(tail)
-    if comps.empty:
-        st.markdown('<div class="card"><div class="kpiTitle">No components</div><div class="kpiSub">No component records found for the selected aircraft.</div></div>', unsafe_allow_html=True)
+    # ----------------------------
+    # NEW: AIRCRAFT + COMPONENT SELECTOR (2-step)
+    # ----------------------------
+    all_components = get_components(None)
+    if all_components.empty:
+        st.markdown(
+            '<div class="card"><div class="kpiTitle">No components</div>'
+            '<div class="kpiSub">No component records found in the system.</div></div>',
+            unsafe_allow_html=True,
+        )
         return
 
-    # Build labels for display only
-    comps = comps.copy()
-    comps["label"] = comps.apply(lambda r: f"{r['tail_number']} • {r['type']} • {r['name']} #{r['component_id']}", axis=1)
+    tail_numbers = sorted(all_components["tail_number"].dropna().unique().tolist())
+    selected_tail = st.selectbox("Aircraft (tail number)", ["All"] + tail_numbers, index=0)
 
-    comp_ids = comps["component_id"].tolist()
+    comps = get_components(None if selected_tail == "All" else selected_tail)
+    if comps.empty:
+        st.markdown(
+            '<div class="card"><div class="kpiTitle">No components</div>'
+            '<div class="kpiSub">No component records found for the selected aircraft.</div></div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    types = sorted(comps["type"].dropna().unique().tolist())
+    selected_type = st.selectbox("Component category", ["All"] + types, index=0)
+    if selected_type != "All":
+        comps = comps[comps["type"] == selected_type].copy()
+
+    comps = comps.reset_index(drop=True)
+
+    def component_label(i: int) -> str:
+        r = comps.loc[i]
+        typ = str(r["type"]).replace("_", " ").title()
+        name = str(r["name"])
+        if selected_tail == "All":
+            return f"{r['tail_number']} • {typ} • {name}  (#{int(r['component_id'])})"
+        return f"{typ} • {name}  (#{int(r['component_id'])})"
 
     left, right = st.columns([1.55, 1.0], gap="large")
 
@@ -745,28 +755,27 @@ def main():
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown("<div class='kpiTitle'>Component</div>", unsafe_allow_html=True)
 
-        selected_comp_id = st.selectbox(
+        selected_idx = st.selectbox(
             " ",
-            options=comp_ids,
-            format_func=lambda cid: comps.loc[comps["component_id"] == cid, "label"].iloc[0],
+            options=list(range(len(comps))),
+            format_func=component_label,
             label_visibility="collapsed",
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # RUL trend
-        series = get_rul_series(int(selected_comp_id))
+        selected_comp_id = int(comps.loc[selected_idx, "component_id"])
+
+        series = get_rul_series(selected_comp_id)
         rul_trend_chart(series, dark_mode)
 
     with right:
-        # Summary panel data
-        row = comps[comps["component_id"] == int(selected_comp_id)].iloc[0]
+        row = comps.loc[selected_idx]
         health = safe_float(row.get("last_health_score"), 0.0)
         rul_hours = safe_float(row.get("remaining_useful_life"), 0.0)
 
-        alerts_df = get_open_alerts_for_component(int(selected_comp_id))
-        latest = get_latest_prediction_with_rpn(int(selected_comp_id))
+        alerts_df = get_open_alerts_for_component(selected_comp_id)
+        latest = get_latest_prediction_with_rpn(selected_comp_id)
 
-        # Latest prediction details
         model_line = "Model: —"
         conf = None
         last_pred_time = ""
@@ -782,27 +791,23 @@ def main():
             if model_id is not None:
                 model_line = get_model_label(int(model_id))
 
-            # RPN
             if "rpn_calc" in latest.columns:
                 rpn_calc = latest_row.get("rpn_calc", None)
             if "rpn" in latest.columns:
                 rpn = latest_row.get("rpn", None)
-            # S/O/D
+
             sev = latest_row.get("fmea_severity", None)
             occ = latest_row.get("fmea_occurrence_base", None)
             det = latest_row.get("fmea_detection_base", None)
 
-        # Choose RPN value to show
         rpn_to_show = None
         if rpn_calc is not None and pd.notna(rpn_calc):
             rpn_to_show = safe_float(rpn_calc, None)
         elif rpn is not None and pd.notna(rpn):
             rpn_to_show = safe_float(rpn, None)
 
-        # Risk label
         risk_label, risk_color = compute_risk_label(alerts_df, health, rul_hours, rpn_to_show)
 
-        # Summary card (no fluff)
         st.markdown(
             f"""
             <div class="card">
@@ -821,15 +826,12 @@ def main():
             unsafe_allow_html=True,
         )
 
-        # Metric mini-cards (bigger, readable)
         m1, m2, m3 = st.columns([1.0, 1.0, 1.15], gap="small")
 
         with m1:
             st.markdown(gauge_html("Health", health, "0–100"), unsafe_allow_html=True)
 
         with m2:
-            # Remaining time gauge: map hours to 0–100 for ring
-            # Use a simple cap for visual: 0..250 hours -> 0..100
             capped = max(0.0, min(250.0, rul_hours))
             pct = (capped / 250.0) * 100.0
             st.markdown(
@@ -850,7 +852,6 @@ def main():
             )
 
         with m3:
-            # RPN indicator: show value + S/O/D if available
             if rpn_to_show is None:
                 st.markdown(
                     """
@@ -862,7 +863,6 @@ def main():
                     unsafe_allow_html=True,
                 )
             else:
-                # Map typical RPN 0..300 to gauge percent
                 cap = max(0.0, min(300.0, float(rpn_to_show)))
                 pct = (cap / 300.0) * 100.0
                 breakdown = ""
@@ -890,21 +890,17 @@ def main():
                     unsafe_allow_html=True,
                 )
 
-        # Open alerts panel
         render_open_alerts(alerts_df)
 
-        # Maintenance mode extra info (kept separate)
         if mode == "Maintenance / Engineer":
             st.markdown('<div class="card">', unsafe_allow_html=True)
             st.markdown("<div class='kpiTitle'>Maintenance details</div>", unsafe_allow_html=True)
 
-            # Confidence (shown only here)
             if conf is not None:
                 st.markdown(f"<div class='kpiSub'>Prediction confidence: <b>{conf:.0%}</b></div>", unsafe_allow_html=True)
             else:
                 st.markdown("<div class='kpiSub'>Prediction confidence: —</div>", unsafe_allow_html=True)
 
-            # Show the last few remaining-life points in a small table (audit-friendly)
             tail_series = series.tail(8).copy()
             if not tail_series.empty:
                 tail_series["prediction_time"] = pd.to_datetime(tail_series["prediction_time"], errors="coerce")
@@ -925,12 +921,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
