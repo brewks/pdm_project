@@ -10,8 +10,8 @@ import time
 DB_PATH = "ga_maintenance.db"
 
 st.set_page_config(
-    page_title="GA Predictive Maintenance",
-    page_icon="🛩️",
+    page_title="Component Analytics",
+    page_icon="🧩",
     layout="wide",
 )
 
@@ -305,3 +305,4 @@ if refresh_interval > 0:
     st.info(f"Auto-refreshing every {refresh_interval}s")
     time.sleep(refresh_interval)
     st.rerun()
+
