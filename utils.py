@@ -2,15 +2,23 @@
 import sqlite3
 import pandas as pd
 import json
+import streamlit as st
 
 DB_PATH = "ga_maintenance.db"
 
-def load_df(query):
+
+# ----------------------------
+# DB HELPERS (keep)
+# ----------------------------
+def load_df(query, params: tuple = ()):
     """Run a SQL query and return a pandas DataFrame."""
     conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(query, conn)
-    conn.close()
+    try:
+        df = pd.read_sql_query(query, conn, params=params)
+    finally:
+        conn.close()
     return df
+
 
 def validate_metrics(metrics_json):
     """Validate that a JSON string includes all required performance metric fields."""
@@ -20,3 +28,167 @@ def validate_metrics(metrics_json):
         return all(k in data for k in required)
     except (json.JSONDecodeError, TypeError):
         return False
+
+
+def table_exists(name: str) -> bool:
+    """True if a table/view exists in SQLite."""
+    df = load_df(
+        "SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name = ?",
+        (name,),
+    )
+    return not df.empty
+
+
+# ----------------------------
+# UI HELPERS (centralized)
+# ----------------------------
+def badge(label: str, color: str) -> str:
+    return f'<span class="badge" style="background:{color};">{label}</span>'
+
+
+def inject_global_styles(dark_mode: bool):
+    """
+    ONE source of truth for your UI theme.
+    Call this once per page after you know dark_mode.
+    """
+    if dark_mode:
+        bg = "#0B1220"
+        bg2 = "#0E172A"
+        panel = "rgba(17, 27, 47, 0.86)"
+        border = "rgba(148, 163, 184, 0.14)"
+        text = "rgba(226, 232, 240, 0.92)"
+        muted = "rgba(226, 232, 240, 0.68)"
+        shadow = "0 10px 28px rgba(0,0,0,0.35)"
+        input_bg = "rgba(15, 23, 42, 0.75)"
+        accent = "#5AA2FF"
+        sidebar_bg = "linear-gradient(180deg, #081024 0%, #0B1220 100%)"
+        sidebar_border = "1px solid rgba(148,163,184,0.12)"
+    else:
+        bg = "#F3F6FB"
+        bg2 = "#EEF3FA"
+        panel = "rgba(255, 255, 255, 0.92)"
+        border = "rgba(15, 23, 42, 0.10)"
+        text = "rgba(15, 23, 42, 0.92)"
+        muted = "rgba(15, 23, 42, 0.65)"
+        shadow = "0 10px 26px rgba(2, 6, 23, 0.08)"
+        input_bg = "rgba(255, 255, 255, 0.96)"
+        accent = "#1F6FEB"
+        sidebar_bg = "linear-gradient(180deg, #F7FAFF 0%, #F3F6FB 100%)"
+        sidebar_border = "1px solid rgba(2,6,23,0.10)"
+
+    st.markdown(
+        f"""
+        <style>
+          :root {{
+            --bg: {bg};
+            --bg2: {bg2};
+            --panel: {panel};
+            --border: {border};
+            --text: {text};
+            --muted: {muted};
+            --shadow: {shadow};
+            --input: {input_bg};
+            --accent: {accent};
+          }}
+
+          .stApp {{
+            background: radial-gradient(1200px 600px at 20% 0%, var(--bg2), var(--bg));
+            color: var(--text);
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+          }}
+
+          /* Wider canvas */
+          .block-container {{
+            padding-top: 1.0rem;
+            padding-bottom: 1.6rem;
+            max-width: 96vw;
+            padding-left: 2.0rem;
+            padding-right: 2.0rem;
+          }}
+
+          [data-testid="stToolbar"] {{ visibility: hidden; height: 0; }}
+          footer {{ visibility: hidden; }}
+          header {{ visibility: hidden; }}
+
+          /* Sidebar */
+          section[data-testid="stSidebar"] {{
+            background: {sidebar_bg};
+            border-right: {sidebar_border};
+          }}
+
+          /* Force sidebar text readable in light mode too */
+          section[data-testid="stSidebar"] * {{
+            color: var(--text) !important;
+            opacity: 1 !important;
+          }}
+          section[data-testid="stSidebar"] .stCaption,
+          section[data-testid="stSidebar"] small,
+          section[data-testid="stSidebar"] label {{
+            color: var(--muted) !important;
+          }}
+
+          /* Cards */
+          .card {{
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px 18px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(8px);
+          }}
+
+          .kpiTitle {{
+            font-size: 0.88rem;
+            color: var(--muted);
+            margin-bottom: 6px;
+          }}
+
+          .kpiValue {{
+            font-size: 1.70rem;
+            font-weight: 850;
+            color: var(--text);
+          }}
+
+          .kpiSub {{
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 0.88rem;
+          }}
+
+          .badge {{
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.80rem;
+            font-weight: 850;
+            color: white;
+          }}
+
+          /* Inputs */
+          [data-baseweb="select"] > div {{
+            border-radius: 12px !important;
+            background: var(--input) !important;
+            border: 1px solid var(--border) !important;
+          }}
+          [data-baseweb="input"] > div {{
+            border-radius: 12px !important;
+            background: var(--input) !important;
+            border: 1px solid var(--border) !important;
+          }}
+
+          /* Buttons */
+          .stButton > button {{
+            border-radius: 12px;
+            padding: 0.55rem 0.9rem;
+            font-weight: 850;
+            border: 1px solid var(--border);
+            background: var(--accent);
+            color: white;
+          }}
+          .stButton > button:hover {{
+            filter: brightness(0.96);
+          }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
