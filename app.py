@@ -94,7 +94,7 @@ def fmt_int_or_dash(x):
 
 
 # ----------------------------
-# STYLES (YOUR FUNCTION + 2 TINY FIXES)
+# STYLES
 # ----------------------------
 def inject_global_styles(dark_mode: bool):
     if dark_mode:
@@ -110,8 +110,6 @@ def inject_global_styles(dark_mode: bool):
         grid = "rgba(148, 163, 184, 0.10)"
         sidebar_bg = "linear-gradient(180deg, #081024 0%, #0B1220 100%)"
         sidebar_border = "1px solid rgba(148,163,184,0.12)"
-        axis_label = "#A8B3C7"
-        grid_opacity = 0.15
     else:
         bg = "#F3F6FB"
         bg2 = "#EEF3FA"
@@ -125,8 +123,6 @@ def inject_global_styles(dark_mode: bool):
         grid = "rgba(15, 23, 42, 0.08)"
         sidebar_bg = "linear-gradient(180deg, #F7FAFF 0%, #F3F6FB 100%)"
         sidebar_border = "1px solid rgba(2,6,23,0.10)"
-        axis_label = "#334155"
-        grid_opacity = 0.25
 
     st.markdown(
         f"""
@@ -150,7 +146,6 @@ def inject_global_styles(dark_mode: bool):
             font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
           }}
 
-          /* Wider canvas: fixes unused side space */
           .block-container {{
             padding-top: 1.0rem;
             padding-bottom: 1.6rem;
@@ -168,24 +163,20 @@ def inject_global_styles(dark_mode: bool):
             border-right: {sidebar_border};
           }}
 
-          /* Sidebar spacing + cleaner look */
           section[data-testid="stSidebar"] .block-container {{
             padding-top: 1.0rem;
           }}
 
-          /* Force all sidebar text to be readable */
           section[data-testid="stSidebar"] * {{
             color: var(--text) !important;
           }}
 
-          /* Muted sidebar captions / helper text */
           section[data-testid="stSidebar"] .stCaption,
           section[data-testid="stSidebar"] small,
           section[data-testid="stSidebar"] label {{
             color: var(--muted) !important;
           }}
 
-          /* Selectbox input text */
           section[data-testid="stSidebar"] [data-baseweb="select"] * {{
             color: var(--text) !important;
           }}
@@ -210,7 +201,6 @@ def inject_global_styles(dark_mode: bool):
             backdrop-filter: blur(8px);
           }}
 
-          /* KPI cards: bigger + more "Airbus strip" */
           .card.kpi {{
             padding: 18px 20px;
             min-height: 104px;
@@ -240,7 +230,6 @@ def inject_global_styles(dark_mode: bool):
             color: white;
           }}
 
-          /* Inputs */
           [data-baseweb="select"] > div {{
             border-radius: 12px !important;
             background: var(--input) !important;
@@ -252,7 +241,6 @@ def inject_global_styles(dark_mode: bool):
             border: 1px solid var(--border) !important;
           }}
 
-          /* Buttons */
           .stButton > button {{
             border-radius: 12px;
             padding: 0.55rem 0.9rem;
@@ -265,7 +253,6 @@ def inject_global_styles(dark_mode: bool):
             filter: brightness(0.96);
           }}
 
-          /* Gauges */
           .gaugeWrap {{
             display:flex;
             gap:12px;
@@ -305,10 +292,6 @@ def inject_global_styles(dark_mode: bool):
             margin-top: 2px;
           }}
 
-          /* Tighter spacing between blocks (fixes "too much space") */
-          [data-testid="stVerticalBlock"] > div:has(> [data-testid="stMarkdownContainer"]) {{
-            margin-bottom: 0.45rem;
-          }}
           [data-testid="stHorizontalBlock"] {{
             gap: 0.95rem;
           }}
@@ -322,44 +305,9 @@ def badge(label: str, color: str) -> str:
     return f'<span class="badge" style="background:{color};">{label}</span>'
 
 
-def gauge_html(title: str, value: float, label: str, pct_0_to_100: bool = True) -> str:
-    """
-    Renders a clean radial gauge. No stray closing tags -> no </div> artifacts.
-    """
-    if pct_0_to_100:
-        v = max(0.0, min(100.0, value))
-        deg = int((v / 100.0) * 360)
-        shown = f"{int(round(v))}"
-        sub = label
-    else:
-        v = value
-        deg = 0
-        shown = f"{v:.0f}"
-        sub = label
-
-    return f"""
-    <div class="card">
-      <div class="kpiTitle">{title}</div>
-      <div class="gaugeWrap">
-        <div class="gauge" style="--deg:{deg}deg;">
-          <div class="gaugeInner">
-            <div class="gaugeVal">{shown}</div>
-            <div class="gaugeLbl">{sub}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    """
-
-
 # ----------------------------
 # DATA LOADERS
 # ----------------------------
-@st.cache_data(show_spinner=False)
-def get_aircraft_list() -> pd.DataFrame:
-    return read_sql("SELECT tail_number, model, predictive_status FROM aircraft ORDER BY tail_number")
-
-
 @st.cache_data(show_spinner=False)
 def get_components(tail_number: Optional[str]) -> pd.DataFrame:
     if tail_number and tail_number != "All":
@@ -464,9 +412,6 @@ def get_model_label(model_id: int) -> str:
     return f"{name}{ver}{suffix}" if name else "Model: —"
 
 
-# ----------------------------
-# RISK LOGIC (PILOT-FRIENDLY)
-# ----------------------------
 def compute_risk_label(open_alerts: pd.DataFrame, health: float, rul_hours: float, rpn_val: Optional[float]) -> Tuple[str, str]:
     if not open_alerts.empty:
         sev = open_alerts["severity"].astype(str).str.lower().tolist()
@@ -490,10 +435,7 @@ def compute_risk_label(open_alerts: pd.DataFrame, health: float, rul_hours: floa
     return "Low", "#16A34A"
 
 
-# ----------------------------
-# UI SECTIONS
-# ----------------------------
-def top_kpi_strip(snapshot: pd.DataFrame, tail_filter: str):
+def top_kpi_strip(snapshot: pd.DataFrame):
     if snapshot.empty:
         st.markdown(
             '<div class="card kpi"><div class="kpiTitle">Fleet</div><div class="kpiValue">No snapshot data</div>'
@@ -503,8 +445,6 @@ def top_kpi_strip(snapshot: pd.DataFrame, tail_filter: str):
         return
 
     df = snapshot.copy()
-    if tail_filter != "All":
-        df = df[df["tail_number"] == tail_filter]
 
     active_alerts = int(df["active_alerts"].fillna(0).sum()) if "active_alerts" in df.columns else 0
 
@@ -513,7 +453,6 @@ def top_kpi_strip(snapshot: pd.DataFrame, tail_filter: str):
     if "predictive_status" in df.columns and not df["predictive_status"].isna().all():
         worst = max(df["predictive_status"].astype(str).str.lower().tolist(), key=lambda x: status_rank.get(x, 0))
 
-    # Robust average health
     avg_health = None
     if "health_score" in df.columns:
         hs = pd.to_numeric(df["health_score"], errors="coerce")
@@ -546,7 +485,7 @@ def top_kpi_strip(snapshot: pd.DataFrame, tail_filter: str):
             <div class="card kpi">
               <div class="kpiTitle">Active alerts</div>
               <div class="kpiValue">{active_alerts}</div>
-              <div class="kpiSub">Unresolved across selected aircraft</div>
+              <div class="kpiSub">Unresolved across fleet</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -671,27 +610,17 @@ def render_open_alerts(alerts_df: pd.DataFrame):
 
 
 def main():
-    # Sidebar controls
+    # Sidebar controls (NO aircraft selectbox here)
     st.sidebar.markdown("### GA PdM")
     dark_mode = st.sidebar.toggle("Dark mode", value=True)
     inject_global_styles(dark_mode)
 
-    # Optional: link to maintenance tasks (must be OUTSIDE CSS)
-    # If your Streamlit version supports it, this will work:
     try:
         st.sidebar.page_link("pages/01_Maintenance_Tasks.py", label="Maintenance Tasks", icon="🛠️")
     except Exception:
         st.sidebar.caption("🛠️ Maintenance Tasks (use sidebar page list)")
 
-    mode = st.sidebar.radio(
-        "View",
-        ["Pilot / Operator", "Maintenance / Engineer"],
-        index=0,
-    )
-
-    aircraft_df = get_aircraft_list()
-    tail_options = ["All"] + (aircraft_df["tail_number"].tolist() if not aircraft_df.empty else [])
-    tail = st.sidebar.selectbox("Aircraft (tail number)", tail_options, index=0)
+    mode = st.sidebar.radio("View", ["Pilot / Operator", "Maintenance / Engineer"], index=0)
 
     # Header
     st.markdown(
@@ -706,12 +635,12 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # Top KPI strip
+    # Top KPI strip (fleet-level)
     snapshot = get_dashboard_snapshot()
-    top_kpi_strip(snapshot, tail)
+    top_kpi_strip(snapshot)
 
     # ----------------------------
-    # NEW: AIRCRAFT + COMPONENT SELECTOR (2-step)
+    # MAIN PAGE: AIRCRAFT + COMPONENT SELECTOR (2-step)
     # ----------------------------
     all_components = get_components(None)
     if all_components.empty:
@@ -811,112 +740,18 @@ def main():
         st.markdown(
             f"""
             <div class="card">
-              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-                <div>
-                  <div class="kpiTitle">Summary</div>
-                  <div style="font-weight:850; margin-top:4px;">{row['tail_number']} • {row['type']} • {row['name']}</div>
-                  <div class="kpiSub" style="margin-top:10px;">Condition: <b>{row.get('condition','—')}</b></div>
-                  <div class="kpiSub" style="margin-top:8px;">Risk: {badge(risk_label, risk_color)}</div>
-                  <div class="kpiSub" style="margin-top:10px;">{model_line}</div>
-                  <div class="kpiSub" style="margin-top:6px;">Last update: {last_pred_time if last_pred_time else "—"}</div>
-                </div>
-              </div>
+              <div class="kpiTitle">Summary</div>
+              <div style="font-weight:850; margin-top:4px;">{row['tail_number']} • {row['type']} • {row['name']}</div>
+              <div class="kpiSub" style="margin-top:10px;">Condition: <b>{row.get('condition','—')}</b></div>
+              <div class="kpiSub" style="margin-top:8px;">Risk: {badge(risk_label, risk_color)}</div>
+              <div class="kpiSub" style="margin-top:10px;">{model_line}</div>
+              <div class="kpiSub" style="margin-top:6px;">Last update: {last_pred_time if last_pred_time else "—"}</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        m1, m2, m3 = st.columns([1.0, 1.0, 1.15], gap="small")
-
-        with m1:
-            st.markdown(gauge_html("Health", health, "0–100"), unsafe_allow_html=True)
-
-        with m2:
-            capped = max(0.0, min(250.0, rul_hours))
-            pct = (capped / 250.0) * 100.0
-            st.markdown(
-                f"""
-                <div class="card">
-                  <div class="kpiTitle">Remaining time</div>
-                  <div class="gaugeWrap">
-                    <div class="gauge" style="--deg:{int((pct/100)*360)}deg;">
-                      <div class="gaugeInner">
-                        <div class="gaugeVal">{int(round(rul_hours))}h</div>
-                        <div class="gaugeLbl">estimate</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        with m3:
-            if rpn_to_show is None:
-                st.markdown(
-                    """
-                    <div class="card">
-                      <div class="kpiTitle">RPN (risk priority)</div>
-                      <div class="kpiSub">No RPN recorded for this component.</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            else:
-                cap = max(0.0, min(300.0, float(rpn_to_show)))
-                pct = (cap / 300.0) * 100.0
-                breakdown = ""
-                if sev is not None and occ is not None and det is not None and pd.notna(sev) and pd.notna(occ) and pd.notna(det):
-                    breakdown = f"<div class='kpiSub' style='margin-top:8px;'>S {int(sev)} × O {int(occ)} × D {int(det)}</div>"
-
-                st.markdown(
-                    f"""
-                    <div class="card">
-                      <div class="kpiTitle">RPN (risk priority)</div>
-                      <div class="gaugeWrap">
-                        <div class="gauge" style="--deg:{int((pct/100)*360)}deg;">
-                          <div class="gaugeInner">
-                            <div class="gaugeVal">{int(round(float(rpn_to_show)))}</div>
-                            <div class="gaugeLbl">0–300</div>
-                          </div>
-                        </div>
-                        <div>
-                          <div class="kpiSub">{badge(risk_label, risk_color)} (action level)</div>
-                          {breakdown}
-                        </div>
-                      </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
         render_open_alerts(alerts_df)
-
-        if mode == "Maintenance / Engineer":
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.markdown("<div class='kpiTitle'>Maintenance details</div>", unsafe_allow_html=True)
-
-            if conf is not None:
-                st.markdown(f"<div class='kpiSub'>Prediction confidence: <b>{conf:.0%}</b></div>", unsafe_allow_html=True)
-            else:
-                st.markdown("<div class='kpiSub'>Prediction confidence: —</div>", unsafe_allow_html=True)
-
-            tail_series = series.tail(8).copy()
-            if not tail_series.empty:
-                tail_series["prediction_time"] = pd.to_datetime(tail_series["prediction_time"], errors="coerce")
-                tail_series = tail_series.dropna(subset=["prediction_time"])
-                tail_series = tail_series.sort_values("prediction_time", ascending=False)
-                tail_series = tail_series.rename(
-                    columns={
-                        "prediction_time": "Time",
-                        "predicted_value": "RUL (hrs)",
-                        "confidence": "Confidence",
-                    }
-                )
-                tail_series["Confidence"] = tail_series["Confidence"].apply(lambda x: f"{safe_float(x,0):.0%}")
-                st.dataframe(tail_series, use_container_width=True, hide_index=True)
-
-            st.markdown("</div>", unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
