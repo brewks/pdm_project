@@ -1,31 +1,28 @@
 import os
-import json
 import sqlite3
-from datetime import datetime
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import pandas as pd
 import streamlit as st
 import altair as alt
 
-# Keep Altair from forcing its own theme
-alt.themes.enable("none")
 
 # ----------------------------
 # CONFIG
 # ----------------------------
-DB_PATH = "ga_maintenance.db"
-SQL_SEED_FILE = "full_pdm_seed.sql"
-LOGO_PATH = "logo.png"
+APP_TITLE = "General Aviation Predictive Maintenance"
+DB_PATH = os.getenv("DB_PATH", "ga_maintenance.db")
 
 st.set_page_config(
-    page_title="GA Predictive Maintenance",
-    page_icon="🛩️",
+    page_title=APP_TITLE,
+    page_icon="✈️",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
+
 # ----------------------------
-# STYLES
+# STYLES (your function + targeted fixes)
 # ----------------------------
 def inject_global_styles(dark_mode: bool):
     if dark_mode:
@@ -43,6 +40,8 @@ def inject_global_styles(dark_mode: bool):
         sidebar_border = "1px solid rgba(148,163,184,0.12)"
         axis_label = "#A8B3C7"
         grid_opacity = 0.15
+        sidebar_text = "rgba(226, 232, 240, 0.92)"
+        sidebar_muted = "rgba(226, 232, 240, 0.70)"
     else:
         bg = "#F3F6FB"
         bg2 = "#EEF3FA"
@@ -58,6 +57,9 @@ def inject_global_styles(dark_mode: bool):
         sidebar_border = "1px solid rgba(2,6,23,0.10)"
         axis_label = "#334155"
         grid_opacity = 0.25
+        # Fix: sidebar labels disappearing in light mode
+        sidebar_text = "rgba(15, 23, 42, 0.92)"
+        sidebar_muted = "rgba(15, 23, 42, 0.70)"
 
     st.markdown(
         f"""
@@ -83,12 +85,16 @@ def inject_global_styles(dark_mode: bool):
 
           /* Wider canvas: fixes unused side space */
           .block-container {{
-            padding-top: 1.1rem;
-            padding-bottom: 2.0rem;
-            max-width: 92vw;
-            padding-left: 2.25rem;
-            padding-right: 2.25rem;
+            padding-top: 1.0rem;
+            padding-bottom: 1.4rem;
+            max-width: 96vw;
+            padding-left: 1.6rem;
+            padding-right: 1.6rem;
           }}
+
+          /* Reduce vertical whitespace between sections */
+          .element-container {{ margin-bottom: 0.55rem; }}
+          div[data-testid="stVerticalBlock"] > div {{ gap: 0.75rem; }}
 
           [data-testid="stToolbar"] {{ visibility: hidden; height: 0; }}
           footer {{ visibility: hidden; }}
@@ -99,47 +105,15 @@ def inject_global_styles(dark_mode: bool):
             border-right: {sidebar_border};
           }}
 
-          /* -----------------------------
-             SIDEBAR: force readable text in BOTH modes
-             (fixes: nav items + widget labels invisible in light mode)
-          ------------------------------*/
+          /* Fix sidebar text in light mode (and keep consistent in dark) */
           section[data-testid="stSidebar"] * {{
-            color: var(--text) !important;
+            color: {sidebar_text} !important;
+          }}
+          section[data-testid="stSidebar"] .stCaption {{
+            color: {sidebar_muted} !important;
           }}
 
-          section[data-testid="stSidebar"] [data-testid="stSidebarNav"] * {{
-            color: var(--text) !important;
-          }}
-
-          section[data-testid="stSidebar"] a,
-          section[data-testid="stSidebar"] a * {{
-            color: var(--text) !important;
-            text-decoration: none;
-          }}
-
-          section[data-testid="stSidebar"] label,
-          section[data-testid="stSidebar"] label * {{
-            color: var(--text) !important;
-          }}
-
-          section[data-testid="stSidebar"] [data-baseweb="select"] * {{
-            color: var(--text) !important;
-          }}
-          section[data-testid="stSidebar"] [data-baseweb="select"] input {{
-            color: var(--text) !important;
-            -webkit-text-fill-color: var(--text) !important;
-          }}
-
-          section[data-testid="stSidebar"] [role="radiogroup"] *,
-          section[data-testid="stSidebar"] [data-testid="stCheckbox"] * {{
-            color: var(--text) !important;
-          }}
-
-          section[data-testid="stSidebar"] [data-testid="stSlider"] * {{
-            color: var(--text) !important;
-          }}
-
-          h1, h2, h3 {{ letter-spacing: -0.02em; }}
+          h1, h2, h3 {{ letter-spacing: -0.02em; margin-bottom: 0.25rem; }}
           .muted {{
             color: var(--muted);
             font-size: 0.95rem;
@@ -155,10 +129,10 @@ def inject_global_styles(dark_mode: bool):
             backdrop-filter: blur(8px);
           }}
 
-          /* KPI cards: bigger + more "Airbus strip" */
+          /* KPI cards: bigger + strip feel */
           .card.kpi {{
             padding: 18px 20px;
-            min-height: 108px;
+            min-height: 110px;
           }}
           .kpiTitle {{
             font-size: 0.88rem;
@@ -169,6 +143,7 @@ def inject_global_styles(dark_mode: bool):
             font-size: 1.65rem;
             font-weight: 800;
             color: var(--text);
+            line-height: 1.2;
           }}
           .kpiSub {{
             margin-top: 8px;
@@ -196,13 +171,6 @@ def inject_global_styles(dark_mode: bool):
             background: var(--input) !important;
             border: 1px solid var(--border) !important;
           }}
-          textarea.stTextArea textarea {{
-            background: var(--input);
-            color: var(--text);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            font-size: 14px;
-          }}
 
           .stDataFrame, .stTable {{
             color: var(--text) !important;
@@ -216,9 +184,6 @@ def inject_global_styles(dark_mode: bool):
             border: 1px solid var(--border);
             background: var(--accent);
             color: white;
-          }}
-          .stButton > button:hover {{
-            filter: brightness(0.96);
           }}
 
           /* Gauges */
@@ -261,570 +226,559 @@ def inject_global_styles(dark_mode: bool):
             margin-top: 2px;
           }}
 
-          /* Make Streamlit columns feel less compressed */
+          /* Make columns feel less compressed */
           [data-testid="stHorizontalBlock"] {{
-            gap: 1.25rem;
+            gap: 1.0rem;
           }}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-   
-    return axis_label, grid_opacity
+
+# ----------------------------
+# DATA ACCESS
+# ----------------------------
+@st.cache_data(show_spinner=False)
+def read_sql(query: str, params: Tuple = ()) -> pd.DataFrame:
+    with sqlite3.connect(DB_PATH) as conn:
+        return pd.read_sql_query(query, conn, params=params)
 
 
-def badge(text: str, level: str) -> str:
-    colors = {
-        "ok": "#1F9D55",
-        "warn": "#DFAF2C",
-        "crit": "#D64545",
-        "info": "#3B82F6",
-        "muted": "#64748B",
-    }
-    c = colors.get(level, colors["muted"])
-    return f'<span class="badge" style="background:{c};">{text}</span>'
-
-
-def kpi_card(title: str, value: str, sub: str | None = None, badge_html: str | None = None):
-    sub_html = f'<div class="kpiSub">{sub}</div>' if sub else ""
-    badge_block = f"<div style='margin-top:10px;'>{badge_html}</div>" if badge_html else ""
-    st.markdown(
-        f"""
-        <div class="card kpi">
-          <div class="kpiTitle">{title}</div>
-          <div class="kpiValue">{value}</div>
-          {sub_html}
-          {badge_block}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def gauge_card(title: str, value_text: str, pct_0_100: float, sub: str | None = None, extra_html: str | None = None):
-    pct = 0.0 if pd.isna(pct_0_100) else float(pct_0_100)
-    pct = max(0.0, min(100.0, pct))
-    deg = f"{pct * 3.6:.2f}deg"
-    sub_html = f"<div class='kpiSub'>{sub}</div>" if sub else ""
-    extra = f"<div style='margin-top:10px;'>{extra_html}</div>" if extra_html else ""
-    st.markdown(
-        f"""
-        <div class="card">
-          <div class="kpiTitle">{title}</div>
-          <div class="gaugeWrap">
-            <div class="gauge" style="--deg: {deg};">
-              <div class="gaugeInner">
-                <div class="gaugeVal">{value_text}</div>
-                <div class="gaugeLbl">{int(round(pct))}%</div>
-              </div>
-            </div>
-            <div style="flex:1;">
-              {sub_html}
-              {extra}
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def clamp_int(x, lo, hi):
+def safe_float(x, default: float = 0.0) -> float:
     try:
-        return max(lo, min(hi, int(round(float(x)))))
+        if x is None:
+            return default
+        return float(x)
     except Exception:
-        return lo
+        return default
 
 
-def rpn_bucket(rpn: int) -> tuple[str, str]:
-    # label, badge-level
-    if rpn >= 700:
-        return ("Critical", "crit")
-    if rpn >= 450:
-        return ("High", "warn")
-    if rpn >= 200:
-        return ("Medium", "info")
-    return ("Low", "ok")
+def fmt_dt(x) -> str:
+    if x is None or str(x).strip() == "":
+        return "—"
+    s = str(x)
+    # SQLite datetime('now','localtime') usually returns "YYYY-MM-DD HH:MM:SS"
+    return s
 
 
-def compute_rpn(component_alerts: pd.DataFrame, component_preds: pd.DataFrame, health_score):
-    # Severity (1–10) from worst open alert severity
-    sev_score = 2
-    if not component_alerts.empty and "severity" in component_alerts.columns:
-        sev_order = {"critical": 9, "warning": 6, "advisory": 3}
-        for s in ["critical", "warning", "advisory"]:
-            if (component_alerts["severity"].astype(str).str.lower() == s).any():
-                sev_score = sev_order[s]
+# ----------------------------
+# UI HELPERS
+# ----------------------------
+def badge(text: str, color: str) -> str:
+    return f'<span class="badge" style="background:{color};">{text}</span>'
+
+
+def risk_from_rul(rul_hours: Optional[float]) -> Tuple[str, str]:
+    """
+    Simple, decision-friendly mapping.
+    (You can tune these thresholds later.)
+    """
+    if rul_hours is None:
+        return "Unknown", "#64748B"
+    if rul_hours < 25:
+        return "High", "#DC2626"
+    if rul_hours < 75:
+        return "Medium", "#2563EB"
+    return "Low", "#16A34A"
+
+
+def rpn_level(rpn: Optional[float]) -> Tuple[str, str]:
+    if rpn is None:
+        return "Unknown", "#64748B"
+    rpn = float(rpn)
+    # Common, interpretable bands (tunable)
+    if rpn >= 300:
+        return "High", "#DC2626"
+    if rpn >= 120:
+        return "Medium", "#2563EB"
+    return "Low", "#16A34A"
+
+
+def gauge(value: float, label: str, suffix: str = "", max_value: float = 100.0) -> str:
+    value = max(0.0, min(float(value), float(max_value)))
+    deg = (value / max_value) * 360.0
+    main = f"{int(round(value))}{suffix}".strip()
+    return f"""
+    <div class="gaugeWrap">
+      <div class="gauge" style="--deg:{deg}deg;">
+        <div class="gaugeInner">
+          <div class="gaugeVal">{main}</div>
+          <div class="gaugeLbl">{label}</div>
+        </div>
+      </div>
+    </div>
+    """
+
+
+def kpi_card(title: str, value: str, sub: str = "") -> str:
+    sub_html = f'<div class="kpiSub">{sub}</div>' if sub else ""
+    return f"""
+    <div class="card kpi">
+      <div class="kpiTitle">{title}</div>
+      <div class="kpiValue">{value}</div>
+      {sub_html}
+    </div>
+    """
+
+
+# ----------------------------
+# APP
+# ----------------------------
+def main():
+    # Sidebar (clean, professional)
+    st.sidebar.markdown("### GA PdM")
+    dark_mode = st.sidebar.toggle("Dark mode", value=True)
+
+    inject_global_styles(dark_mode)
+
+    mode = st.sidebar.radio(
+        "View mode",
+        ["Pilot / Operator", "Maintenance / Engineer"],
+        index=0,
+        help="Pilot mode is simplified. Maintenance mode includes technical detail (RPN, confidence, model info).",
+    )
+
+    st.sidebar.markdown("---")
+    st.sidebar.caption("Data source: SQLite (ga_maintenance.db)")
+
+    # Filters
+    snap = read_sql("SELECT * FROM dashboard_snapshot_view ORDER BY tail_number;")
+    tails = ["All"] + sorted(snap["tail_number"].dropna().unique().tolist()) if not snap.empty else ["All"]
+    selected_tail = st.sidebar.selectbox("Aircraft (tail number)", tails, index=0)
+
+    # Header
+    h1, h2 = st.columns([5, 1.2])
+    with h1:
+        st.markdown(f"## {APP_TITLE}")
+        st.markdown('<div class="muted">Clear health, risk, and maintenance signals for pilots and mechanics.</div>', unsafe_allow_html=True)
+    with h2:
+        # Optional: if you have a logo file, keep it. If not, nothing breaks.
+        for logo in ("logo.png", "logo_white.png", "assets/logo.png"):
+            if os.path.exists(logo):
+                st.image(logo, use_container_width=True)
                 break
 
-    # Occurrence (1–10) from max failure confidence
-    occ_score = 2
-    if not component_preds.empty and "prediction_type" in component_preds.columns:
-        f = component_preds[component_preds["prediction_type"] == "failure"].copy()
-        if not f.empty and "confidence" in f.columns:
-            max_conf = pd.to_numeric(f["confidence"], errors="coerce").dropna()
-            if not max_conf.empty:
-                occ_score = clamp_int(max_conf.max() * 10, 1, 10)
-
-    # Detection (1–10): lower health => higher detection score
-    if pd.isna(health_score):
-        det_score = 5
+    # Fleet KPI strip (wide)
+    # Fleet aggregation uses dashboard_snapshot_view
+    if selected_tail == "All":
+        snap_f = snap.copy()
     else:
-        det_score = clamp_int(10 - (float(health_score) / 10.0), 1, 10)
+        snap_f = snap[snap["tail_number"] == selected_tail].copy()
 
-    rpn = int(sev_score * occ_score * det_score)  # 1..1000
-    return rpn, sev_score, occ_score, det_score
+    total_alerts = int(safe_float(snap_f["active_alerts"].sum() if not snap_f.empty else 0, 0))
+    avg_health = safe_float(snap_f["health_score"].mean() if not snap_f.empty else None, 0.0)
+    last_analysis = snap_f["last_prediction_time"].dropna().max() if not snap_f.empty else None
 
+    # Fleet status from aircraft.predictive_status (joined via snapshot view)
+    # snap has predictive_status; pick "worst" if multiple
+    status_rank = {"maintenance_required": 4, "attention_needed": 3, "monitoring": 2, "normal": 1}
+    fleet_status = "normal"
+    if not snap_f.empty and "predictive_status" in snap_f.columns:
+        vals = [v for v in snap_f["predictive_status"].dropna().tolist()]
+        if vals:
+            fleet_status = sorted(vals, key=lambda x: status_rank.get(str(x), 0), reverse=True)[0]
 
-def safe_dt(x) -> pd.Timestamp | None:
-    try:
-        t = pd.to_datetime(x, errors="coerce")
-        if pd.isna(t):
-            return None
-        return t
-    except Exception:
-        return None
+    status_label = fleet_status.replace("_", " ").title()
+    status_color = {"Normal": "#16A34A", "Monitoring": "#2563EB", "Attention Needed": "#F59E0B", "Maintenance Required": "#DC2626"}.get(status_label, "#64748B")
 
-
-# ----------------------------
-# DB RESTORE
-# ----------------------------
-if not os.path.exists(DB_PATH):
-    st.warning("Database not found. Restoring from SQL seed...")
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            with open(SQL_SEED_FILE, "r", encoding="utf-8") as f:
-                conn.executescript(f.read())
-        st.success("Database restored.")
-    except Exception as e:
-        st.error(f"Database restore failed: {e}")
-        st.stop()
-
-
-# ----------------------------
-# DB HELPERS
-# ----------------------------
-@st.cache_data(show_spinner=False, ttl=45)
-def load_df(query: str) -> pd.DataFrame:
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            return pd.read_sql_query(query, conn)
-    except Exception:
-        # Keep UI clean; return empty and handle downstream
-        return pd.DataFrame()
-
-
-# ----------------------------
-# SIDEBAR
-# ----------------------------
-st.sidebar.markdown("## 🛩️ GA PdM")
-dark_mode = st.sidebar.toggle("Dark mode", value=True)
-
-axis_label, grid_opacity = inject_global_styles(dark_mode)
-
-st.sidebar.markdown("---")
-
-tails = load_df("SELECT DISTINCT tail_number FROM aircraft ORDER BY tail_number;")
-tail_list = []
-if not tails.empty and "tail_number" in tails.columns:
-    tail_list = tails["tail_number"].dropna().astype(str).tolist()
-
-tail_filter = st.sidebar.selectbox("Aircraft (tail number)", options=["All"] + tail_list, index=0)
-
-
-# ----------------------------
-# HEADER (logo right)
-# ----------------------------
-h_left, h_right = st.columns([12, 2], vertical_alignment="center")
-with h_left:
-    st.markdown(
-        """
-        <div style="margin-bottom: 10px;">
-          <h1 style="margin:0;">General Aviation Predictive Maintenance</h1>
-          <div class="muted">Clear health, risk, and maintenance signals for pilots and mechanics.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-with h_right:
-    if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, use_container_width=True)
-
-
-# ----------------------------
-# LOAD DATA
-# ----------------------------
-aircraft_df = load_df(
-    """
-    SELECT tail_number, model, manufacturer, total_hours, last_annual_date,
-           predictive_status, last_predictive_analysis
-    FROM aircraft
-    ORDER BY tail_number
-    """
-)
-
-components_df = load_df(
-    """
-    SELECT component_id, tail_number, name, type, condition,
-           remaining_useful_life, last_health_score
-    FROM components
-    ORDER BY tail_number, type, name
-    """
-)
-
-snapshot_df = load_df("SELECT * FROM dashboard_snapshot_view ORDER BY tail_number;")
-
-alerts_df = load_df(
-    """
-    SELECT alert_id, tail_number, component_id, alert_type, severity, message,
-           generated_time, resolved, confidence_score, notification_status
-    FROM alerts
-    WHERE resolved = 0
-    ORDER BY generated_time DESC
-    """
-)
-
-reco_df = load_df(
-    """
-    SELECT r.recommendation_id, r.component_id, r.timestamp, r.confidence, r.acknowledged, r.implemented,
-           t.task_name, t.system, t.pilot_allowed, t.ac_43_ref
-    FROM maintenance_recommendations r
-    JOIN preventive_tasks t ON r.task_id = t.task_id
-    ORDER BY r.timestamp DESC
-    """
-)
-
-pred_df = load_df(
-    """
-    SELECT prediction_id, component_id, model_id, prediction_time, prediction_type,
-           predicted_value, confidence, time_horizon, explanation
-    FROM component_predictions
-    ORDER BY prediction_time DESC
-    """
-)
-
-if tail_filter != "All":
-    if not aircraft_df.empty and "tail_number" in aircraft_df.columns:
-        aircraft_df = aircraft_df[aircraft_df["tail_number"].astype(str) == str(tail_filter)]
-    if not components_df.empty and "tail_number" in components_df.columns:
-        components_df = components_df[components_df["tail_number"].astype(str) == str(tail_filter)]
-    if not snapshot_df.empty and "tail_number" in snapshot_df.columns:
-        snapshot_df = snapshot_df[snapshot_df["tail_number"].astype(str) == str(tail_filter)]
-    if not alerts_df.empty and "tail_number" in alerts_df.columns:
-        alerts_df = alerts_df[alerts_df["tail_number"].astype(str) == str(tail_filter)]
-    if not pred_df.empty and "component_id" in pred_df.columns and not components_df.empty:
-        pred_df = pred_df.merge(components_df[["component_id", "tail_number"]], on="component_id", how="inner")
-    if not reco_df.empty and "component_id" in reco_df.columns and not components_df.empty:
-        reco_df = reco_df.merge(components_df[["component_id", "tail_number"]], on="component_id", how="inner")
-
-if aircraft_df.empty:
-    st.error("No aircraft found.")
-    st.stop()
-
-if components_df.empty:
-    st.error("No components found.")
-    st.stop()
-
-
-# ----------------------------
-# TOP KPI STRIP (bigger + wider)
-# ----------------------------
-fleet_active_alerts = int(alerts_df.shape[0]) if alerts_df is not None else 0
-fleet_crit = int((alerts_df["severity"].astype(str).str.lower() == "critical").sum()) if not alerts_df.empty and "severity" in alerts_df.columns else 0
-fleet_warn = int((alerts_df["severity"].astype(str).str.lower() == "warning").sum()) if not alerts_df.empty and "severity" in alerts_df.columns else 0
-
-avg_health = None
-if not snapshot_df.empty and "health_score" in snapshot_df.columns:
-    try:
-        avg_health = float(pd.to_numeric(snapshot_df["health_score"], errors="coerce").dropna().mean())
-    except Exception:
-        avg_health = None
-
-last_dates = aircraft_df["last_predictive_analysis"].dropna().tolist() if "last_predictive_analysis" in aircraft_df.columns else []
-last_dt = max([safe_dt(x) for x in last_dates if safe_dt(x) is not None], default=None)
-
-status_map = {
-    "normal": ("Normal", "ok"),
-    "monitoring": ("Monitor", "warn"),
-    "attention_needed": ("Attention", "warn"),
-    "maintenance_required": ("Maintenance", "crit"),
-}
-def fmt_status(s: str) -> tuple[str, str]:
-    if not s:
-        return ("Unknown", "muted")
-    s = str(s).strip().lower()
-    return status_map.get(s, ("Unknown", "muted"))
-
-top_status = None
-if "predictive_status" in aircraft_df.columns and not aircraft_df["predictive_status"].dropna().empty:
-    top_status = aircraft_df["predictive_status"].dropna().astype(str).str.lower().value_counts().idxmax()
-
-label, lvl = fmt_status(top_status) if top_status else ("Unknown", "muted")
-
-kpi1, kpi2, kpi3, kpi4 = st.columns([1.35, 1.35, 1.15, 1.15], gap="large")
-with kpi1:
-    kpi_card("Active alerts", f"{fleet_active_alerts}", f"Critical: {fleet_crit}  •  Warning: {fleet_warn}")
-with kpi2:
-    # Keep gauge in strip (readable at a glance)
-    if avg_health is None:
-        kpi_card("Average health", "—", "0–100 scale")
-    else:
-        gauge_card("Average health", f"{int(round(avg_health))}", avg_health, "0–100 scale")
-with kpi3:
-    kpi_card("Last analysis", last_dt.strftime("%Y-%m-%d") if last_dt else "—", "Latest recorded run")
-with kpi4:
-    kpi_card("Overall status", label, None, badge_html=badge(label, lvl))
-
-st.markdown("")
-
-
-# ----------------------------
-# COMPONENT SELECT (safe resolution, no KeyError)
-# ----------------------------
-comp_view = components_df.copy()
-for col in ["tail_number", "type", "name"]:
-    if col not in comp_view.columns:
-        st.error("Components table is missing required columns.")
-        st.stop()
-
-comp_view["label"] = (
-    comp_view["tail_number"].astype(str).fillna("—")
-    + " • "
-    + comp_view["type"].astype(str).fillna("component").str.replace("_", " ")
-    + " • "
-    + comp_view["name"].astype(str).fillna("—")
-)
-
-left, right = st.columns([2.2, 1], gap="large")
-
-with left:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Component")
-    selected_label = st.selectbox(
-        "Component",
-        options=comp_view["label"].tolist(),
-        index=0,
-        label_visibility="collapsed",
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-sel_row = comp_view[comp_view["label"] == selected_label]
-if sel_row.empty:
-    st.error("Selection error. Please refresh.")
-    st.stop()
-
-selected_comp_id = int(sel_row["component_id"].iloc[0])
-selected_tail = str(sel_row["tail_number"].iloc[0])
-selected_type = str(sel_row["type"].iloc[0])
-selected_name = str(sel_row["name"].iloc[0])
-
-rul = sel_row["remaining_useful_life"].iloc[0] if "remaining_useful_life" in sel_row.columns else None
-health = sel_row["last_health_score"].iloc[0] if "last_health_score" in sel_row.columns else None
-condition = str(sel_row["condition"].iloc[0]) if "condition" in sel_row.columns and pd.notna(sel_row["condition"].iloc[0]) else "—"
-
-comp_preds = pred_df[pred_df["component_id"] == selected_comp_id].copy() if not pred_df.empty and "component_id" in pred_df.columns else pd.DataFrame()
-comp_alerts = alerts_df[alerts_df["component_id"] == selected_comp_id].copy() if not alerts_df.empty and "component_id" in alerts_df.columns else pd.DataFrame()
-comp_reco = reco_df[reco_df["component_id"] == selected_comp_id].copy() if not reco_df.empty and "component_id" in reco_df.columns else pd.DataFrame()
-
-# Latest RUL prediction
-latest_rul_pred = None
-latest_rul_conf = None
-latest_rul_time = None
-if not comp_preds.empty and "prediction_type" in comp_preds.columns:
-    r = comp_preds[comp_preds["prediction_type"] == "remaining_life"].copy()
-    if not r.empty:
-        r["prediction_time"] = pd.to_datetime(r["prediction_time"], errors="coerce")
-        r = r.dropna(subset=["prediction_time"]).sort_values("prediction_time", ascending=False)
-        if not r.empty:
-            latest_rul_pred = float(pd.to_numeric(r["predicted_value"].iloc[0], errors="coerce"))
-            latest_rul_conf = float(pd.to_numeric(r["confidence"].iloc[0], errors="coerce"))
-            latest_rul_time = r["prediction_time"].iloc[0]
-
-# Simple risk label
-if not comp_alerts.empty and "severity" in comp_alerts.columns and (comp_alerts["severity"].astype(str).str.lower() == "critical").any():
-    risk_lbl, risk_lvl = ("High", "crit")
-elif not comp_alerts.empty and "severity" in comp_alerts.columns and (comp_alerts["severity"].astype(str).str.lower() == "warning").any():
-    risk_lbl, risk_lvl = ("Medium", "warn")
-else:
-    risk_lbl, risk_lvl = ("Low", "ok")
-
-# RPN (derived)
-rpn, rpn_sev, rpn_occ, rpn_det = compute_rpn(comp_alerts, comp_preds, health)
-rpn_label, rpn_level = rpn_bucket(rpn)
-rpn_pct = max(0.0, min(100.0, (rpn / 1000.0) * 100.0))
-
-
-with right:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Summary")
-    st.markdown(f"**{selected_tail}** • {selected_type.replace('_',' ')} • **{selected_name}**")
-    st.markdown(f"Condition: **{condition.replace('_',' ')}**")
-    st.markdown(f"Risk: {badge(risk_lbl, risk_lvl)}", unsafe_allow_html=True)
-    st.markdown("---")
-
-    a1, a2, a3 = st.columns(3, gap="large")
-
-    with a1:
-        if pd.isna(health):
-            gauge_card("Health", "—", 0, "Higher is better")
-        else:
-            gauge_card("Health", f"{int(float(health))}", float(health), "Higher is better")
-
-    with a2:
-        disp_rul = latest_rul_pred if latest_rul_pred is not None else (float(rul) if rul is not None and pd.notna(rul) else None)
-        if disp_rul is None:
-            gauge_card("Remaining time", "—", 0, "Hours (estimate)")
-        else:
-            # Gauge normalization for quick glance: 0–500h -> 0–100%
-            pct = max(0.0, min(100.0, (float(disp_rul) / 500.0) * 100.0))
-            gauge_card("Remaining time", f"{float(disp_rul):.0f}h", pct, "Hours (estimate)")
-
-    with a3:
-        gauge_card(
-            "RPN (risk priority)",
-            f"{rpn}",
-            rpn_pct,
-            "0–1000 scale",
-            extra_html=f"{badge(rpn_label, rpn_level)}<div class='muted' style='margin-top:6px;'>Sev {rpn_sev} × Lik {rpn_occ} × Det {rpn_det}</div>",
+    k1, k2, k3, k4 = st.columns([1.25, 1.25, 1.25, 1.0])
+    with k1:
+        st.markdown(kpi_card("Active alerts", f"{total_alerts}", "Unresolved across selected fleet"), unsafe_allow_html=True)
+    with k2:
+        st.markdown(kpi_card("Average health", f"{int(round(avg_health))}/100", "Higher is better"), unsafe_allow_html=True)
+    with k3:
+        st.markdown(kpi_card("Last analysis", fmt_dt(last_analysis), "Most recent prediction timestamp"), unsafe_allow_html=True)
+    with k4:
+        st.markdown(
+            f"""
+            <div class="card kpi">
+              <div class="kpiTitle">Overall status</div>
+              <div class="kpiValue">{status_label}</div>
+              <div class="kpiSub">{badge(status_label, status_color)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
-    if latest_rul_time is not None and latest_rul_conf is not None:
-        st.caption(f"Last RUL update: {latest_rul_time.strftime('%Y-%m-%d %H:%M')} • Confidence: {latest_rul_conf*100:.0f}%")
+    # Load components
+    comps = read_sql(
+        """
+        SELECT component_id, tail_number, name, type, condition,
+               remaining_useful_life, last_health_score
+        FROM components
+        ORDER BY tail_number, type, name;
+        """
+    )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    if selected_tail != "All" and not comps.empty:
+        comps = comps[comps["tail_number"] == selected_tail].copy()
 
-st.markdown("")
+    st.markdown("")  # small spacer (kept minimal)
 
+    # Component selector
+    left, right = st.columns([2.2, 1.0])
 
-# ----------------------------
-# CHART + ALERTS
-# ----------------------------
-c1, c2 = st.columns([2.25, 1], gap="large")
+    with left:
+        st.markdown("### Component")
+        if comps.empty:
+            st.warning("No components found for this selection.")
+            return
 
-with c1:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+        # SAFE selection: store IDs and use format_func, no label->id dict required
+        comp_ids = comps["component_id"].astype(int).tolist()
+
+        def comp_label(cid: int) -> str:
+            row = comps[comps["component_id"] == cid].iloc[0]
+            tail = row["tail_number"]
+            typ = str(row["type"]).replace("_", " ").title()
+            nm = row["name"]
+            return f"{tail} • {typ} • {nm}  (#{cid})"
+
+        selected_comp_id = st.selectbox(
+            "Select component",
+            comp_ids,
+            format_func=comp_label,
+            index=0,
+        )
+
+    # Pull latest per-component prediction bundle with RPN
+    # RPN comes from component_predictions_with_rpn (rpn_calc / factors)
+    preds = read_sql(
+        """
+        SELECT *
+        FROM component_predictions_with_rpn
+        WHERE component_id = ?
+        ORDER BY prediction_time DESC
+        LIMIT 250;
+        """,
+        (int(selected_comp_id),),
+    )
+
+    # Component basics
+    comp_row = comps[comps["component_id"] == int(selected_comp_id)].iloc[0]
+    rul = comp_row["remaining_useful_life"]
+    health = comp_row["last_health_score"]
+    condition = comp_row["condition"]
+    tail_number = comp_row["tail_number"]
+    comp_type = comp_row["type"]
+    comp_name = comp_row["name"]
+
+    risk_lbl, risk_col = risk_from_rul(None if pd.isna(rul) else float(rul))
+
+    # Latest RUL prediction confidence (if present)
+    rul_conf = None
+    if not preds.empty:
+        pr = preds[preds["prediction_type"] == "remaining_life"]
+        if not pr.empty:
+            rul_conf = pr.iloc[0]["confidence"]
+
+    # Latest RPN (if present)
+    latest_rpn = None
+    s = o = d = None
+    failure_mode = None
+    if not preds.empty:
+        # Use calculated if stored is null
+        latest = preds.iloc[0]
+        latest_rpn = latest.get("rpn_calc")
+        if pd.isna(latest_rpn):
+            latest_rpn = latest.get("rpn")
+        failure_mode = latest.get("failure_mode")
+        s = latest.get("fmea_severity")
+        o = latest.get("fmea_occurrence_base")
+        d = latest.get("fmea_detection_base")
+
+    rpn_lbl, rpn_col = rpn_level(None if (latest_rpn is None or pd.isna(latest_rpn)) else float(latest_rpn))
+
+    # Alerts (open)
+    open_alerts = read_sql(
+        """
+        SELECT severity, alert_type, message, generated_time
+        FROM alerts
+        WHERE component_id = ? AND resolved = 0
+        ORDER BY generated_time DESC
+        LIMIT 50;
+        """,
+        (int(selected_comp_id),),
+    )
+    crit_count = int((open_alerts["severity"] == "critical").sum()) if not open_alerts.empty else 0
+    warn_count = int((open_alerts["severity"] == "warning").sum()) if not open_alerts.empty else 0
+
+    # Summary + gauges
+    with right:
+        st.markdown("### Summary")
+        st.markdown(
+            f"""
+            <div class="card">
+              <div style="font-weight:800; margin-bottom:6px;">{tail_number} • {str(comp_type).replace("_"," ").title()} • {comp_name}</div>
+              <div class="muted" style="margin-top:2px;">Condition: <b>{condition}</b></div>
+              <div class="muted" style="margin-top:2px;">Risk: {badge(risk_lbl, risk_col)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Row of three compact KPI gauges (no HTML artifacts)
+        g1, g2, g3 = st.columns([1, 1, 1])
+
+        with g1:
+            st.markdown(
+                f"""
+                <div class="card">
+                  <div class="kpiTitle">Health</div>
+                  {gauge(0 if pd.isna(health) else float(health), "score", "", 100)}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with g2:
+            # RUL displayed in hours
+            rul_val = 0.0 if (rul is None or pd.isna(rul)) else float(rul)
+            # Cap gauge visually at 300h (tunable)
+            st.markdown(
+                f"""
+                <div class="card">
+                  <div class="kpiTitle">Remaining time</div>
+                  {gauge(rul_val, "hours", "h", 300)}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with g3:
+            # RPN: show only in maintenance mode, otherwise show Confidence (simpler)
+            if mode == "Maintenance / Engineer":
+                rpn_val = 0.0 if (latest_rpn is None or pd.isna(latest_rpn)) else float(latest_rpn)
+                # RPN gauge scale: 0–1000 (10*10*10)
+                st.markdown(
+                    f"""
+                    <div class="card">
+                      <div class="kpiTitle">RPN</div>
+                      {gauge(rpn_val, "priority", "", 1000)}
+                      <div class="kpiSub">{badge(rpn_lbl, rpn_col)}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                conf_pct = 0 if (rul_conf is None or pd.isna(rul_conf)) else int(round(float(rul_conf) * 100))
+                st.markdown(
+                    f"""
+                    <div class="card">
+                      <div class="kpiTitle">Prediction confidence</div>
+                      {gauge(conf_pct, "confidence", "%", 100)}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        # Maintenance mode: show S×O×D breakdown (clean, not verbose)
+        if mode == "Maintenance / Engineer":
+            if s is not None and not pd.isna(s) and o is not None and not pd.isna(o) and d is not None and not pd.isna(d):
+                st.markdown(
+                    f"""
+                    <div class="card" style="margin-top:10px;">
+                      <div class="kpiTitle">RPN breakdown</div>
+                      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <div><b>Severity</b>: {int(s)}</div>
+                        <div><b>Occurrence</b>: {int(o)}</div>
+                        <div><b>Detection</b>: {int(d)}</div>
+                      </div>
+                      <div class="kpiSub">Failure mode: <b>{failure_mode if failure_mode else "—"}</b></div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f"""
+                    <div class="card" style="margin-top:10px;">
+                      <div class="kpiTitle">RPN breakdown</div>
+                      <div class="muted">No FMEA ratings found for this component/failure mode.</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        # Open alerts summary (simple + actionable)
+        if open_alerts.empty:
+            st.markdown(
+                f"""
+                <div class="card" style="margin-top:10px;">
+                  <div class="kpiTitle">Open alerts</div>
+                  <div class="kpiSub">{badge("None", "#16A34A")} No open alerts for this component.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            sev_color = {"critical": "#DC2626", "warning": "#2563EB", "advisory": "#64748B"}
+            st.markdown(
+                f"""
+                <div class="card" style="margin-top:10px;">
+                  <div class="kpiTitle">Open alerts</div>
+                  <div class="kpiSub">
+                    {badge(f"Critical: {crit_count}", sev_color["critical"])}&nbsp;
+                    {badge(f"Warning: {warn_count}", sev_color["warning"])}
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    # ----------------------------
+    # RUL trend (main chart)
+    # ----------------------------
     st.markdown("### RUL trend")
 
-    if comp_preds.empty:
-        st.info("No prediction history available for this component.")
+    rul_series = pd.DataFrame()
+    if not preds.empty:
+        rul_series = preds[preds["prediction_type"] == "remaining_life"].copy()
+
+    if rul_series.empty:
+        st.markdown(
+            '<div class="card"><div class="muted">No RUL time-series available for this component.</div></div>',
+            unsafe_allow_html=True,
+        )
     else:
-        trend = comp_preds[comp_preds["prediction_type"] == "remaining_life"].copy() if "prediction_type" in comp_preds.columns else pd.DataFrame()
-        if trend.empty:
-            st.info("No remaining-life history available for this component.")
-        else:
-            trend["prediction_time"] = pd.to_datetime(trend["prediction_time"], errors="coerce")
-            trend = trend.dropna(subset=["prediction_time"])
-            trend = trend.sort_values("prediction_time")
+        rul_series["prediction_time"] = pd.to_datetime(rul_series["prediction_time"], errors="coerce")
+        rul_series = rul_series.dropna(subset=["prediction_time"])
+        rul_series = rul_series.sort_values("prediction_time")
 
-            chart = (
-                alt.Chart(trend)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("prediction_time:T", title="Time"),
-                    y=alt.Y("predicted_value:Q", title="Hours remaining"),
-                    tooltip=[
-                        alt.Tooltip("prediction_time:T", title="Time"),
-                        alt.Tooltip("predicted_value:Q", title="Hours"),
-                        alt.Tooltip("confidence:Q", title="Confidence", format=".2f"),
-                        alt.Tooltip("time_horizon:N", title="Horizon"),
-                    ],
-                )
-                .properties(height=360)
-                .configure_view(strokeOpacity=0)
-                .configure_axis(
-                    grid=True,
-                    gridOpacity=grid_opacity,
-                    labelColor=axis_label,
-                    titleColor=axis_label,
-                    tickColor="rgba(0,0,0,0)",
-                )
-            )
-            st.altair_chart(chart, use_container_width=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-with c2:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Open alerts")
-
-    if comp_alerts.empty:
-        st.markdown(badge("None", "ok") + " No open alerts for this component.", unsafe_allow_html=True)
-    else:
-        show = comp_alerts.copy()
-        if "generated_time" in show.columns:
-            show["generated_time"] = pd.to_datetime(show["generated_time"], errors="coerce")
-            show = show.sort_values("generated_time", ascending=False)
-        show = show.head(6)
-
-        for _, row in show.iterrows():
-            sev = str(row.get("severity", "")).lower()
-            lvl = "crit" if sev == "critical" else ("warn" if sev == "warning" else "info")
-            msg = str(row.get("message", "")).strip()
-            ts = row.get("generated_time")
-            ts_txt = ts.strftime("%Y-%m-%d %H:%M") if pd.notna(ts) else "—"
-
-            st.markdown(f"{badge(sev.capitalize() if sev else 'Alert', lvl)} <span class='muted'>({ts_txt})</span>", unsafe_allow_html=True)
-            st.write(msg if msg else "—")
-
-            cs = row.get("confidence_score")
-            if pd.notna(cs):
-                st.caption(f"Confidence: {float(cs)*100:.0f}%")
-
-            st.markdown("---")
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-# ----------------------------
-# NEXT STEPS
-# ----------------------------
-st.markdown("")
-t1, t2 = st.columns([1.6, 1.1], gap="large")
-
-with t1:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Recommended actions")
-
-    if comp_reco.empty:
-        st.info("No recommendations recorded for this component.")
-    else:
-        view = comp_reco.copy()
-        if "timestamp" in view.columns:
-            view["timestamp"] = pd.to_datetime(view["timestamp"], errors="coerce")
-            view = view.sort_values("timestamp", ascending=False)
-        view = view.head(10)
-
-        cols = ["timestamp", "task_name", "system", "pilot_allowed", "ac_43_ref", "confidence", "acknowledged", "implemented"]
-        cols = [c for c in cols if c in view.columns]
-        st.dataframe(view[cols], use_container_width=True, hide_index=True)
-
-        st.download_button(
-            "Download (CSV)",
-            data=view[cols].to_csv(index=False).encode("utf-8"),
-            file_name=f"{selected_tail}_{selected_name}_recommendations.csv".replace(" ", "_"),
-            mime="text/csv",
+        # Pilot mode: simple line
+        base = alt.Chart(rul_series).encode(
+            x=alt.X("prediction_time:T", title="Time"),
+            y=alt.Y("predicted_value:Q", title="Remaining time (hours)"),
+            tooltip=[
+                alt.Tooltip("prediction_time:T", title="Time"),
+                alt.Tooltip("predicted_value:Q", title="RUL (hrs)", format=".0f"),
+                alt.Tooltip("confidence:Q", title="Confidence", format=".0%"),
+            ],
         )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        line = base.mark_line(point=True)
 
-with t2:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Latest predictions")
+        chart = (
+            (line)
+            .properties(height=280)
+            .configure_axis(
+                labelColor="#A8B3C7" if dark_mode else "#334155",
+                titleColor="#A8B3C7" if dark_mode else "#334155",
+                gridColor="rgba(148,163,184,0.12)" if dark_mode else "rgba(15,23,42,0.10)",
+                gridOpacity=0.15 if dark_mode else 0.25,
+            )
+            .configure_view(strokeOpacity=0)
+        )
 
-    if comp_preds.empty:
-        st.info("No predictions available.")
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.altair_chart(chart, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # ----------------------------
+    # Pilot vs Maintenance sections
+    # ----------------------------
+    if mode == "Pilot / Operator":
+        st.markdown("### What to do")
+        msg = "Continue normal operations."
+        if risk_lbl == "Medium":
+            msg = "Plan maintenance soon. Monitor this component."
+        if risk_lbl == "High":
+            msg = "Maintenance attention recommended before extended operations."
+        st.markdown(
+            f"""
+            <div class="card">
+              <div style="font-weight:900; font-size:1.05rem; margin-bottom:6px;">Recommendation</div>
+              <div class="muted">{msg}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Show only the most recent 5 open alerts (if any)
+        if not open_alerts.empty:
+            st.markdown("### Latest alerts")
+            show = open_alerts.head(5).copy()
+            show["generated_time"] = show["generated_time"].apply(fmt_dt)
+            st.dataframe(show, use_container_width=True, hide_index=True)
+
     else:
-        p = comp_preds.copy()
-        if "prediction_time" in p.columns:
-            p["prediction_time"] = pd.to_datetime(p["prediction_time"], errors="coerce")
-            p = p.sort_values("prediction_time", ascending=False)
-        p = p.head(12)
+        st.markdown("### Maintenance details")
 
-        show_cols = ["prediction_time", "prediction_type", "predicted_value", "confidence", "time_horizon"]
-        show_cols = [c for c in show_cols if c in p.columns]
-        st.dataframe(p[show_cols], use_container_width=True, hide_index=True)
+        # Latest model info (minimal)
+        model_info = read_sql(
+            """
+            SELECT pm.model_name, pm.version, pm.model_type, pm.training_date, pm.deployment_date
+            FROM predictive_models pm
+            JOIN component_predictions cp ON pm.model_id = cp.model_id
+            WHERE cp.component_id = ?
+            ORDER BY cp.prediction_time DESC
+            LIMIT 1;
+            """,
+            (int(selected_comp_id),),
+        )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        mcol1, mcol2 = st.columns([1.2, 1.0])
+
+        with mcol1:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown("**Latest model used**")
+            if model_info.empty:
+                st.markdown('<div class="muted">No model record found for this component.</div>', unsafe_allow_html=True)
+            else:
+                row = model_info.iloc[0].to_dict()
+                st.markdown(
+                    f"""
+                    <div class="muted"><b>{row.get("model_name","—")}</b> • v{row.get("version","—")} • {row.get("model_type","—")}</div>
+                    <div class="muted">Trained: {fmt_dt(row.get("training_date"))} • Deployed: {fmt_dt(row.get("deployment_date"))}</div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with mcol2:
+            # Confidence as its own decision-support gauge (kept in maintenance mode too)
+            conf_pct = 0 if (rul_conf is None or pd.isna(rul_conf)) else int(round(float(rul_conf) * 100))
+            st.markdown(
+                f"""
+                <div class="card">
+                  <div class="kpiTitle">RUL confidence</div>
+                  {gauge(conf_pct, "confidence", "%", 100)}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # Show open alerts table fully
+        st.markdown("### Open alerts (unresolved)")
+        if open_alerts.empty:
+            st.info("No open alerts for this component.")
+        else:
+            df = open_alerts.copy()
+            df["generated_time"] = df["generated_time"].apply(fmt_dt)
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # Optional: show latest predictions table (trimmed)
+        st.markdown("### Latest predictions")
+        if preds.empty:
+            st.info("No predictions found.")
+        else:
+            cols = [
+                "prediction_time",
+                "prediction_type",
+                "predicted_value",
+                "confidence",
+                "time_horizon",
+                "failure_mode",
+                "rpn_calc",
+            ]
+            slim = preds[[c for c in cols if c in preds.columns]].copy()
+            slim["prediction_time"] = slim["prediction_time"].apply(fmt_dt)
+            st.dataframe(slim.head(25), use_container_width=True, hide_index=True)
+
+    # Footer note (short, non-fluffy)
+    st.caption("Operational view. Values depend on latest recorded predictions and unresolved alerts.")
 
 
+if __name__ == "__main__":
+    main()
