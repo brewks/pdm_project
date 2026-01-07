@@ -6,6 +6,9 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 
+from utils import inject_global_styles, badge
+
+
 # If you have centralized styling already, use this:
 # from utils import inject_global_styles, badge
 # For now, keep a small local badge fallback if utils isn't ready.
@@ -55,115 +58,6 @@ def safe_float(x, default=None):
 
 def badge(label: str, color: str) -> str:
     return f'<span class="badge" style="background:{color};">{label}</span>'
-
-
-# ----------------------------
-# Styles (TEMP)
-# Replace this with: from utils import inject_global_styles
-# ----------------------------
-def inject_global_styles(dark_mode: bool):
-    if dark_mode:
-        bg = "#0B1220"
-        bg2 = "#0E172A"
-        panel = "rgba(17, 27, 47, 0.86)"
-        border = "rgba(148, 163, 184, 0.14)"
-        text = "#E5E7EB"
-        muted = "#CBD5E1"
-        shadow = "0 10px 26px rgba(0,0,0,0.30)"
-        input_bg = "rgba(15, 23, 42, 0.85)"
-        accent = "#5AA2FF"
-    else:
-        bg = "#F3F6FB"
-        bg2 = "#EEF3FA"
-        panel = "rgba(255, 255, 255, 0.96)"
-        border = "rgba(15, 23, 42, 0.12)"
-        text = "#0F172A"
-        muted = "#475569"
-        shadow = "0 8px 20px rgba(2, 6, 23, 0.06)"
-        input_bg = "rgba(241, 245, 249, 0.98)"
-        accent = "#1F6FEB"
-
-    st.markdown(
-        f"""
-        <style>
-          :root {{
-            --text: {text};
-            --muted: {muted};
-            --panel: {panel};
-            --border: {border};
-            --shadow: {shadow};
-            --input: {input_bg};
-            --accent: {accent};
-          }}
-
-          .stApp {{
-            background: radial-gradient(1200px 600px at 20% 0%, {bg2}, {bg});
-            color: var(--text);
-            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-          }}
-
-          .block-container {{
-            max-width: 96vw;
-            padding-top: 1.0rem;
-            padding-left: 2.0rem;
-            padding-right: 2.0rem;
-            padding-bottom: 1.6rem;
-          }}
-
-          [data-testid="stToolbar"], footer, header {{
-            visibility: hidden;
-            height: 0;
-          }}
-
-          section[data-testid="stSidebar"] {{
-            background: var(--input) !important;
-            border-right: 1px solid var(--border);
-          }}
-
-          section[data-testid="stSidebar"] * {{
-            color: var(--text) !important;
-            opacity: 1 !important;
-          }}
-
-          .card {{
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 16px 18px;
-            box-shadow: var(--shadow);
-            margin-bottom: 14px;
-          }}
-
-          .kpiTitle {{
-            font-size: 0.88rem;
-            color: var(--muted);
-            margin-bottom: 6px;
-          }}
-
-          .kpiValue {{
-            font-size: 1.55rem;
-            font-weight: 850;
-            color: var(--text);
-          }}
-
-          .kpiSub {{
-            margin-top: 8px;
-            color: var(--muted);
-            font-size: 0.88rem;
-          }}
-
-          .badge {{
-            display:inline-block;
-            padding:4px 10px;
-            border-radius:999px;
-            font-size:0.80rem;
-            font-weight:850;
-            color:white;
-          }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 # ----------------------------
@@ -486,3 +380,4 @@ with st.expander("Show raw records (for audit)"):
         st.write("No prediction records.")
     else:
         st.dataframe(series.tail(250), use_container_width=True, hide_index=True)
+
