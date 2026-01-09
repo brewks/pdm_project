@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import altair as alt
 from utils import load_df, validate_metrics
+from utils import inject_global_styles, badge
 
 # Ensure Altair respects custom styling
 alt.themes.enable("none")
@@ -265,3 +266,4 @@ if st.button("Validate"):
         st.success("✅ Valid performance metrics JSON.")
     else:
         st.error("❌ Missing required fields: precision, recall, accuracy, f1_score.")
+
