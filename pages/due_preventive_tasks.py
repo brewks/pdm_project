@@ -3,6 +3,8 @@ import pandas as pd
 import sqlite3
 import altair as alt
 
+from utils import inject_global_styles, badge
+
 # Ensure Altair respects our styling
 alt.themes.enable("none")
 
@@ -219,3 +221,4 @@ st.download_button(
     file_name="due_preventive_tasks.csv",
     mime="text/csv",
 )
+
