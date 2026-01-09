@@ -46,6 +46,25 @@ def badge(label: str, color: str) -> str:
     return f'<span class="badge" style="background:{color};">{label}</span>'
 
 
+def kpi_card(title: str, value: str, sub: str = "") -> str:
+    """Returns KPI card HTML (use with st.markdown(..., unsafe_allow_html=True))."""
+    sub_html = f"<div class='kpiSub'>{sub}</div>" if sub else ""
+    return f"""
+    <div class="card kpi">
+      <div class="kpiTitle">{title}</div>
+      <div class="kpiValue">{value}</div>
+      {sub_html}
+    </div>
+    """
+
+
+def altair_axis_colors(dark_mode: bool):
+    """Central axis/grid styling for Altair charts."""
+    axis_color = "#A8B3C7" if dark_mode else "#334155"
+    grid_opacity = 0.15 if dark_mode else 0.25
+    return axis_color, grid_opacity
+
+
 def inject_global_styles(dark_mode: bool):
     """
     ONE source of truth for your UI theme.
@@ -111,12 +130,9 @@ def inject_global_styles(dark_mode: bool):
             padding-right: 2.0rem;
           }}
 
-          /* Footer can be hidden safely */
           footer {{ visibility: hidden; }}
 
-          /* --------------------------------
-             KEEP HEADER/TOOLBAR (sidebar toggle lives here)
-             -------------------------------- */
+          /* Keep header/toolbar */
           [data-testid="stHeader"] {{
             background: transparent !important;
           }}
@@ -124,7 +140,6 @@ def inject_global_styles(dark_mode: bool):
             visibility: visible !important;
           }}
 
-          /* Make toolbar unobtrusive instead of hidden */
           [data-testid="stToolbar"] {{
             visibility: visible !important;
             height: auto !important;
@@ -135,7 +150,6 @@ def inject_global_styles(dark_mode: bool):
             opacity: 1;
           }}
 
-          /* Optional: remove thin top decoration line */
           [data-testid="stDecoration"] {{
             display: none !important;
           }}
@@ -146,7 +160,6 @@ def inject_global_styles(dark_mode: bool):
             border-right: {sidebar_border};
           }}
 
-          /* Force sidebar text readable in light mode too */
           section[data-testid="stSidebar"] * {{
             color: var(--text) !important;
             opacity: 1 !important;
@@ -165,6 +178,12 @@ def inject_global_styles(dark_mode: bool):
             padding: 16px 18px;
             box-shadow: var(--shadow);
             backdrop-filter: blur(8px);
+          }}
+
+          /* KPI cards */
+          .card.kpi {{
+            padding: 18px 20px;
+            min-height: 104px;
           }}
 
           .kpiTitle {{
@@ -193,14 +212,12 @@ def inject_global_styles(dark_mode: bool):
             color: white;
           }}
 
-          /* --------------------------------
-             iOS-LIKE SELECT / INPUT CONTROLS
-             -------------------------------- */
+          /* iOS-like select / inputs */
           [data-baseweb="select"] > div {{
             border-radius: 14px !important;
             background: var(--input) !important;
             border: 1px solid rgba(120,120,140,0.28) !important;
-            min-height: 44px !important;   /* iOS touch target */
+            min-height: 44px !important;
             padding-left: 10px !important;
             padding-right: 10px !important;
             box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
@@ -252,21 +269,3 @@ def inject_global_styles(dark_mode: bool):
         """,
         unsafe_allow_html=True,
     )
-
-
-    def kpi_card(title: str, value: str, sub: str = "") -> str:
-        """Returns KPI card HTML (use with st.markdown(..., unsafe_allow_html=True))."""
-        sub_html = f"<div class='kpiSub'>{sub}</div>" if sub else ""
-        return f"""
-        <div class="card kpi">
-          <div class="kpiTitle">{title}</div>
-          <div class="kpiValue">{value}</div>
-          {sub_html}
-        </div>
-
-    def altair_axis_colors(dark_mode: bool):
-        """Central axis/grid styling for Altair charts."""
-        axis_color = "#A8B3C7" if dark_mode else "#334155"
-        grid_opacity = 0.15 if dark_mode else 0.25
-        return axis_color, grid_opacity
-
