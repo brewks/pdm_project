@@ -1,4 +1,3 @@
-import os
 import sqlite3
 from typing import Optional
 
@@ -6,12 +5,7 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 
-from utils import inject_global_styles, badge
-
-
-# If you have centralized styling already, use this:
-# from utils import inject_global_styles, badge
-# For now, keep a small local badge fallback if utils isn't ready.
+from utils import inject_global_styles, badge, altair_axis_colors
 
 DB_PATH = "ga_maintenance.db"
 
@@ -25,7 +19,7 @@ alt.themes.enable("none")
 
 
 # ----------------------------
-# Minimal helpers
+# Minimal DB helpers (page-local is OK)
 # ----------------------------
 def get_conn():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -56,12 +50,8 @@ def safe_float(x, default=None):
         return default
 
 
-def badge(label: str, color: str) -> str:
-    return f'<span class="badge" style="background:{color};">{label}</span>'
-
-
 # ----------------------------
-# Data access for this page
+# Data access
 # ----------------------------
 @st.cache_data(show_spinner=False, ttl=60)
 def get_components() -> pd.DataFrame:
@@ -82,7 +72,7 @@ def get_component_rul_series(component_id: int) -> pd.DataFrame:
     if not table_exists("component_predictions"):
         return pd.DataFrame()
 
-    # If you have the RPN view, use it. Else fall back.
+    # Prefer the RPN view if present
     if table_exists("component_predictions_with_rpn"):
         return read_sql(
             """
@@ -128,10 +118,10 @@ def get_open_alerts(component_id: int) -> pd.DataFrame:
 def compute_risk(open_alerts: pd.DataFrame, health: Optional[float], rul: Optional[float], rpn: Optional[float]):
     # Alerts dominate
     if open_alerts is not None and not open_alerts.empty:
-        sev = open_alerts["severity"].astype(str).str.lower().tolist()
-        if "critical" in sev:
+        sev_list = open_alerts["severity"].astype(str).str.lower().tolist()
+        if "critical" in sev_list:
             return "High", "#DC2626"
-        if "warning" in sev:
+        if "warning" in sev_list:
             return "Medium", "#2563EB"
         return "Low", "#16A34A"
 
@@ -202,36 +192,35 @@ rul_now = safe_float(row.get("remaining_useful_life"), None)
 series = get_component_rul_series(int(selected_comp_id))
 alerts_df = get_open_alerts(int(selected_comp_id))
 
-# Latest RPN (if available)
+# Latest values
 rpn_val = None
 sev = occ = det = None
 conf_latest = None
 last_time = None
 
 if not series.empty:
-    tail_row = series.iloc[-1]
-    conf_latest = safe_float(tail_row.get("confidence"), None)
-    last_time = str(tail_row.get("prediction_time", "")).strip()
+    last_row = series.iloc[-1]
+    conf_latest = safe_float(last_row.get("confidence"), None)
+    last_time = str(last_row.get("prediction_time", "")).strip()
 
-    # rpn_calc preferred
-    if "rpn_calc" in series.columns and pd.notna(tail_row.get("rpn_calc", None)):
-        rpn_val = safe_float(tail_row.get("rpn_calc"), None)
-    elif "rpn" in series.columns and pd.notna(tail_row.get("rpn", None)):
-        rpn_val = safe_float(tail_row.get("rpn"), None)
+    if "rpn_calc" in series.columns and pd.notna(last_row.get("rpn_calc", None)):
+        rpn_val = safe_float(last_row.get("rpn_calc"), None)
+    elif "rpn" in series.columns and pd.notna(last_row.get("rpn", None)):
+        rpn_val = safe_float(last_row.get("rpn"), None)
 
-    sev = tail_row.get("fmea_severity", None)
-    occ = tail_row.get("fmea_occurrence_base", None)
-    det = tail_row.get("fmea_detection_base", None)
+    sev = last_row.get("fmea_severity", None)
+    occ = last_row.get("fmea_occurrence_base", None)
+    det = last_row.get("fmea_detection_base", None)
 
 risk_label, risk_color = compute_risk(alerts_df, health, rul_now, rpn_val)
 
-# Top strip (decision-ready)
+# Top KPI strip
 c1, c2, c3, c4, c5 = st.columns([1.2, 1.2, 1.1, 1.1, 1.2], gap="large")
 
 with c1:
     st.markdown(
         f"""
-        <div class="card">
+        <div class="card kpi">
           <div class="kpiTitle">Risk</div>
           <div class="kpiValue">{badge(risk_label, risk_color)}</div>
           <div class="kpiSub">Current action level</div>
@@ -243,7 +232,7 @@ with c1:
 with c2:
     st.markdown(
         f"""
-        <div class="card">
+        <div class="card kpi">
           <div class="kpiTitle">Health</div>
           <div class="kpiValue">{("—" if health is None else f"{int(round(health))}")}</div>
           <div class="kpiSub">0–100</div>
@@ -255,7 +244,7 @@ with c2:
 with c3:
     st.markdown(
         f"""
-        <div class="card">
+        <div class="card kpi">
           <div class="kpiTitle">RUL</div>
           <div class="kpiValue">{("—" if rul_now is None else f"{int(round(rul_now))} h")}</div>
           <div class="kpiSub">Estimated remaining time</div>
@@ -267,7 +256,7 @@ with c3:
 with c4:
     st.markdown(
         f"""
-        <div class="card">
+        <div class="card kpi">
           <div class="kpiTitle">Confidence</div>
           <div class="kpiValue">{("—" if conf_latest is None else f"{conf_latest:.0%}")}</div>
           <div class="kpiSub">Latest prediction</div>
@@ -279,7 +268,7 @@ with c4:
 with c5:
     st.markdown(
         f"""
-        <div class="card">
+        <div class="card kpi">
           <div class="kpiTitle">RPN</div>
           <div class="kpiValue">{("—" if rpn_val is None else f"{int(round(rpn_val))}")}</div>
           <div class="kpiSub">FMEA risk priority</div>
@@ -287,7 +276,6 @@ with c5:
         """,
         unsafe_allow_html=True,
     )
-
 
 # Main area: chart + alerts
 left, right = st.columns([2.2, 1.0], gap="large")
@@ -303,15 +291,16 @@ with left:
         plot_df["prediction_time"] = pd.to_datetime(plot_df["prediction_time"], errors="coerce")
         plot_df = plot_df.dropna(subset=["prediction_time"])
 
-        axis = "#CBD5E1" if dark_mode else "#334155"
-        grid_op = 0.15 if dark_mode else 0.25
+        axis_color, grid_op = altair_axis_colors(dark_mode)
 
         chart = (
             alt.Chart(plot_df)
             .mark_line(point=True)
             .encode(
-                x=alt.X("prediction_time:T", title="Time", axis=alt.Axis(labelColor=axis, titleColor=axis)),
-                y=alt.Y("predicted_value:Q", title="RUL (hours)", axis=alt.Axis(labelColor=axis, titleColor=axis)),
+                x=alt.X("prediction_time:T", title="Time",
+                        axis=alt.Axis(labelColor=axis_color, titleColor=axis_color)),
+                y=alt.Y("predicted_value:Q", title="RUL (hours)",
+                        axis=alt.Axis(labelColor=axis_color, titleColor=axis_color)),
                 tooltip=[
                     alt.Tooltip("prediction_time:T", title="Time"),
                     alt.Tooltip("predicted_value:Q", title="RUL (h)", format=".0f"),
@@ -339,7 +328,6 @@ with right:
             f"<div class='kpiSub'>RPN breakdown: <b>S {int(sev)} × O {int(occ)} × D {int(det)}</b></div>",
             unsafe_allow_html=True,
         )
-
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -349,10 +337,10 @@ with right:
         st.markdown(f"<div class='kpiSub'>{badge('None', '#16A34A')} No open alerts.</div>", unsafe_allow_html=True)
     else:
         for _, a in alerts_df.iterrows():
-            sev = str(a.get("severity", "")).lower()
-            if sev == "critical":
+            sev_level = str(a.get("severity", "")).lower()
+            if sev_level == "critical":
                 b = badge("Critical", "#DC2626")
-            elif sev == "warning":
+            elif sev_level == "warning":
                 b = badge("Warning", "#2563EB")
             else:
                 b = badge("Advisory", "#16A34A")
@@ -370,14 +358,10 @@ with right:
                 """,
                 unsafe_allow_html=True,
             )
-
     st.markdown("</div>", unsafe_allow_html=True)
 
-
-# Optional: show raw table only as a collapsible
 with st.expander("Show raw records (for audit)"):
     if series.empty:
         st.write("No prediction records.")
     else:
         st.dataframe(series.tail(250), use_container_width=True, hide_index=True)
-
