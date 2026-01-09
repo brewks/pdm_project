@@ -1,271 +1,348 @@
-# utils.py
-import sqlite3
-import pandas as pd
 import json
+import pandas as pd
 import streamlit as st
+import altair as alt
 
-DB_PATH = "ga_maintenance.db"
+from utils import load_df, validate_metrics, inject_global_styles, badge, kpi_card, altair_axis_colors
 
+alt.themes.enable("none")
 
 # ----------------------------
-# DB HELPERS (keep)
+# PAGE CONFIG
 # ----------------------------
-def load_df(query, params: tuple = ()):
-    """Run a SQL query and return a pandas DataFrame."""
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        df = pd.read_sql_query(query, conn, params=params)
-    finally:
-        conn.close()
-    return df
+st.set_page_config(
+    page_title="Model Monitoring",
+    page_icon="📈",
+    layout="wide",
+)
 
-
-def validate_metrics(metrics_json):
-    """Validate that a JSON string includes all required performance metric fields."""
-    try:
-        data = json.loads(metrics_json)
-        required = ["precision", "recall", "accuracy", "f1_score"]
-        return all(k in data for k in required)
-    except (json.JSONDecodeError, TypeError):
-        return False
-
-
-def table_exists(name: str) -> bool:
-    """True if a table/view exists in SQLite."""
-    df = load_df(
-        "SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name = ?",
-        (name,),
+# ----------------------------
+# DATA
+# ----------------------------
+def get_models() -> pd.DataFrame:
+    return load_df(
+        """
+        SELECT model_id, model_name, model_type, version, created_at, performance_metrics
+        FROM predictive_models
+        ORDER BY created_at DESC
+        """
     )
-    return not df.empty
 
+def get_recent_predictions(model_id: int) -> pd.DataFrame:
+    # Operational trace = production-grade
+    return load_df(
+        """
+        SELECT prediction_time, component_id, prediction_type,
+               predicted_value, confidence, time_horizon
+        FROM component_predictions
+        WHERE model_id = ?
+        ORDER BY prediction_time DESC
+        LIMIT 500
+        """,
+        (model_id,),
+    )
+
+def get_components_map() -> pd.DataFrame:
+    return load_df(
+        """
+        SELECT component_id, tail_number, type, name
+        FROM components
+        """
+    )
+
+def fmt_dt(x) -> str:
+    s = str(x).strip() if x is not None else ""
+    return s if s else "—"
+
+def pct_or_dash(x):
+    try:
+        if x is None:
+            return "—"
+        v = float(x)
+        if pd.isna(v):
+            return "—"
+        return f"{v*100:.0f}%"
+    except Exception:
+        return "—"
+
+def validation_chip(metrics_json: str) -> str:
+    if metrics_json and validate_metrics(metrics_json):
+        return badge("Validated", "#16A34A")
+    return badge("Not validated", "#DC2626")
 
 # ----------------------------
-# UI HELPERS (centralized)
+# SIDEBAR
 # ----------------------------
-def badge(label: str, color: str) -> str:
-    return f'<span class="badge" style="background:{color};">{label}</span>'
+st.sidebar.markdown("### GA PdM")
+dark_mode = st.sidebar.toggle("Dark mode", value=True)
+inject_global_styles(dark_mode)
+st.sidebar.caption("Model registry, performance, and traceability")
 
-
-def kpi_card(title: str, value: str, sub: str = "") -> str:
-    """Returns KPI card HTML (use with st.markdown(..., unsafe_allow_html=True))."""
-    sub_html = f"<div class='kpiSub'>{sub}</div>" if sub else ""
-    return f"""
-    <div class="card kpi">
-      <div class="kpiTitle">{title}</div>
-      <div class="kpiValue">{value}</div>
-      {sub_html}
+# ----------------------------
+# HERO
+# ----------------------------
+st.markdown(
+    """
+    <div style="margin-bottom:14px;">
+      <div style="font-size:2.05rem; font-weight:900; letter-spacing:-0.02em;">Model Monitoring</div>
+      <div class="muted">Registry, performance, and operational trace.</div>
     </div>
-    """
+    """,
+    unsafe_allow_html=True,
+)
 
-
-def altair_axis_colors(dark_mode: bool):
-    """Central axis/grid styling for Altair charts."""
-    axis_color = "#A8B3C7" if dark_mode else "#334155"
-    grid_opacity = 0.15 if dark_mode else 0.25
-    return axis_color, grid_opacity
-
-
-def inject_global_styles(dark_mode: bool):
-    """
-    ONE source of truth for your UI theme.
-    Call this once per page after you know dark_mode.
-
-    IMPORTANT for multipage apps:
-    - Do NOT fully hide Streamlit header/toolbar, because the sidebar toggle lives there.
-    - Instead we keep it visible but subtle, so the sidebar never becomes "unreachable".
-    """
-    if dark_mode:
-        bg = "#0B1220"
-        bg2 = "#0E172A"
-        panel = "rgba(17, 27, 47, 0.86)"
-        border = "rgba(148, 163, 184, 0.14)"
-        text = "rgba(226, 232, 240, 0.92)"
-        muted = "rgba(226, 232, 240, 0.68)"
-        shadow = "0 10px 28px rgba(0,0,0,0.35)"
-        input_bg = "rgba(15, 23, 42, 0.75)"
-        accent = "#5AA2FF"
-        sidebar_bg = "linear-gradient(180deg, #081024 0%, #0B1220 100%)"
-        sidebar_border = "1px solid rgba(148,163,184,0.12)"
-    else:
-        bg = "#F3F6FB"
-        bg2 = "#EEF3FA"
-        panel = "rgba(255, 255, 255, 0.92)"
-        border = "rgba(15, 23, 42, 0.10)"
-        text = "rgba(15, 23, 42, 0.92)"
-        muted = "rgba(15, 23, 42, 0.65)"
-        shadow = "0 10px 26px rgba(2, 6, 23, 0.08)"
-        input_bg = "rgba(255, 255, 255, 0.96)"
-        accent = "#1F6FEB"
-        sidebar_bg = "linear-gradient(180deg, #F7FAFF 0%, #F3F6FB 100%)"
-        sidebar_border = "1px solid rgba(2,6,23,0.10)"
-
+models = get_models()
+if models.empty:
     st.markdown(
         f"""
-        <style>
-          :root {{
-            --bg: {bg};
-            --bg2: {bg2};
-            --panel: {panel};
-            --border: {border};
-            --text: {text};
-            --muted: {muted};
-            --shadow: {shadow};
-            --input: {input_bg};
-            --accent: {accent};
-          }}
-
-          .stApp {{
-            background: radial-gradient(1200px 600px at 20% 0%, var(--bg2), var(--bg));
-            color: var(--text);
-            font-family: ui-sans-serif, system-ui, -apple-system,
-                         Segoe UI, Roboto, Helvetica, Arial;
-          }}
-
-          /* Layout */
-          .block-container {{
-            padding-top: 1.0rem;
-            padding-bottom: 1.6rem;
-            max-width: 96vw;
-            padding-left: 2.0rem;
-            padding-right: 2.0rem;
-          }}
-
-          footer {{ visibility: hidden; }}
-
-          /* Keep header/toolbar */
-          [data-testid="stHeader"] {{
-            background: transparent !important;
-          }}
-          header {{
-            visibility: visible !important;
-          }}
-
-          [data-testid="stToolbar"] {{
-            visibility: visible !important;
-            height: auto !important;
-            opacity: 0.12;
-            transition: opacity 0.15s ease;
-          }}
-          [data-testid="stToolbar"]:hover {{
-            opacity: 1;
-          }}
-
-          [data-testid="stDecoration"] {{
-            display: none !important;
-          }}
-
-          /* Sidebar */
-          section[data-testid="stSidebar"] {{
-            background: {sidebar_bg};
-            border-right: {sidebar_border};
-          }}
-
-          section[data-testid="stSidebar"] * {{
-            color: var(--text) !important;
-            opacity: 1 !important;
-          }}
-          section[data-testid="stSidebar"] .stCaption,
-          section[data-testid="stSidebar"] small,
-          section[data-testid="stSidebar"] label {{
-            color: var(--muted) !important;
-          }}
-
-          /* Cards */
-          .card {{
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 16px 18px;
-            box-shadow: var(--shadow);
-            backdrop-filter: blur(8px);
-          }}
-
-          /* KPI cards */
-          .card.kpi {{
-            padding: 18px 20px;
-            min-height: 104px;
-          }}
-
-          .kpiTitle {{
-            font-size: 0.88rem;
-            color: var(--muted);
-            margin-bottom: 6px;
-          }}
-
-          .kpiValue {{
-            font-size: 1.70rem;
-            font-weight: 850;
-          }}
-
-          .kpiSub {{
-            margin-top: 8px;
-            color: var(--muted);
-            font-size: 0.88rem;
-          }}
-
-          .badge {{
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 999px;
-            font-size: 0.80rem;
-            font-weight: 850;
-            color: white;
-          }}
-
-          /* iOS-like select / inputs */
-          [data-baseweb="select"] > div {{
-            border-radius: 14px !important;
-            background: var(--input) !important;
-            border: 1px solid rgba(120,120,140,0.28) !important;
-            min-height: 44px !important;
-            padding-left: 10px !important;
-            padding-right: 10px !important;
-            box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
-          }}
-
-          [data-baseweb="select"] span,
-          [data-baseweb="select"] div {{
-            font-size: 16px !important;
-          }}
-
-          ul[role="listbox"] {{
-            border-radius: 14px !important;
-            border: 1px solid rgba(120,120,140,0.22) !important;
-            background: var(--panel) !important;
-            overflow: hidden !important;
-            box-shadow: var(--shadow) !important;
-          }}
-
-          ul[role="listbox"] li {{
-            font-size: 16px !important;
-            padding-top: 10px !important;
-            padding-bottom: 10px !important;
-          }}
-
-          ul[role="listbox"] li:hover {{
-            background: rgba(90,162,255,0.12) !important;
-          }}
-
-          [data-baseweb="input"] > div {{
-            border-radius: 14px !important;
-            background: var(--input) !important;
-            border: 1px solid rgba(120,120,140,0.28) !important;
-            min-height: 44px !important;
-          }}
-
-          /* Buttons */
-          .stButton > button {{
-            border-radius: 12px;
-            padding: 0.55rem 0.9rem;
-            font-weight: 850;
-            border: 1px solid var(--border);
-            background: var(--accent);
-            color: white;
-          }}
-          .stButton > button:hover {{
-            filter: brightness(0.96);
-          }}
-        </style>
+        <div class="card">
+          {badge("No models found", "#2563EB")}
+          <div class="kpiSub" style="margin-top:10px;">
+            No rows available in <b>predictive_models</b>.
+          </div>
+        </div>
         """,
         unsafe_allow_html=True,
     )
+    st.stop()
+
+# Clean selector label
+models = models.copy()
+models["label"] = models.apply(
+    lambda r: f"{r['model_name']} v{r['version']} ({r['model_type']}) • id {r['model_id']}",
+    axis=1,
+)
+model_ids = models["model_id"].tolist()
+
+st.markdown("<div class='card'>", unsafe_allow_html=True)
+st.markdown("<div class='kpiTitle'>Model</div>", unsafe_allow_html=True)
+selected_model_id = st.selectbox(
+    " ",
+    options=model_ids,
+    format_func=lambda mid: models.loc[models["model_id"] == mid, "label"].iloc[0],
+    label_visibility="collapsed",
+)
+st.markdown("</div>", unsafe_allow_html=True)
+
+row = models[models["model_id"] == selected_model_id].iloc[0]
+metrics_raw = row.get("performance_metrics", "") or ""
+metrics_ok = validate_metrics(metrics_raw)
+metrics = json.loads(metrics_raw) if metrics_ok else {}
+
+pred = get_recent_predictions(int(selected_model_id))
+last_run = fmt_dt(pred["prediction_time"].iloc[0]) if not pred.empty else "—"
+
+# Coverage
+coverage = str(pred["component_id"].nunique()) if not pred.empty else "0"
+
+# Avg confidence
+avg_conf = "—"
+if not pred.empty and "confidence" in pred.columns:
+    c = pd.to_numeric(pred["confidence"], errors="coerce")
+    if c.notna().any():
+        avg_conf = f"{(c.mean()*100):.0f}%"
+
+# Validation chip
+val_chip = validation_chip(metrics_raw)
+
+# ----------------------------
+# TOP KPI STRIP
+# ----------------------------
+c1, c2, c3, c4 = st.columns([1.35, 1.05, 1.05, 1.10], gap="large")
+
+with c1:
+    st.markdown(kpi_card("Active model", f"{row['model_name']} v{row['version']}", f"{row['model_type']}"), unsafe_allow_html=True)
+with c2:
+    st.markdown(kpi_card("Coverage", coverage, "Components with recent predictions"), unsafe_allow_html=True)
+with c3:
+    st.markdown(kpi_card("Avg confidence", avg_conf, "Recent predictions"), unsafe_allow_html=True)
+with c4:
+    st.markdown(kpi_card("Validation", val_chip, "Metrics JSON check"), unsafe_allow_html=True)
+
+# ----------------------------
+# SUMMARY + EXPORTS
+# ----------------------------
+left, right = st.columns([1.45, 1.0], gap="large")
+
+with left:
+    st.markdown(
+        f"""
+        <div class="card">
+          <div class="kpiTitle">Summary</div>
+          <div style="font-weight:850; margin-top:4px;">{row['model_name']} v{row['version']}</div>
+          <div class="kpiSub" style="margin-top:10px;">Algorithm: <b>{row['model_type']}</b></div>
+          <div class="kpiSub" style="margin-top:6px;">Created: <b>{fmt_dt(row.get('created_at'))}</b></div>
+          <div class="kpiSub" style="margin-top:6px;">Last run: <b>{last_run}</b></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    a, b = st.columns(2, gap="small")
+    with a:
+        st.download_button(
+            "Download metrics (JSON)",
+            data=json.dumps(metrics, indent=2) if metrics_ok else "{}",
+            file_name=f"model_{selected_model_id}_metrics.json",
+            mime="application/json",
+        )
+    with b:
+        st.download_button(
+            "Download recent predictions (CSV)",
+            data=pred.to_csv(index=False).encode("utf-8") if not pred.empty else b"prediction_time,component_id\n",
+            file_name=f"model_{selected_model_id}_recent_predictions.csv",
+            mime="text/csv",
+        )
+
+with right:
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("<div class='kpiTitle'>Performance</div>", unsafe_allow_html=True)
+
+    if not metrics_ok:
+        st.markdown("<div class='kpiSub'>Metrics JSON missing required fields.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='kpiSub'>Required: precision, recall, accuracy, f1_score.</div>", unsafe_allow_html=True)
+    else:
+        p = pct_or_dash(metrics.get("precision"))
+        r = pct_or_dash(metrics.get("recall"))
+        a = pct_or_dash(metrics.get("accuracy"))
+        f = pct_or_dash(metrics.get("f1_score"))
+
+        cA, cB = st.columns(2, gap="small")
+        with cA:
+            st.markdown(kpi_card("Precision", p), unsafe_allow_html=True)
+            st.markdown(kpi_card("Accuracy", a), unsafe_allow_html=True)
+        with cB:
+            st.markdown(kpi_card("Recall", r), unsafe_allow_html=True)
+            st.markdown(kpi_card("F1 score", f), unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ----------------------------
+# CHARTS (production signal)
+# ----------------------------
+st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
+cL, cR = st.columns([1.55, 1.0], gap="large")
+
+axis_color, grid_op = altair_axis_colors(dark_mode)
+
+with cL:
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("<div class='kpiTitle'>Confidence over time</div>", unsafe_allow_html=True)
+
+    if pred.empty:
+        st.markdown("<div class='kpiSub'>No predictions found for this model.</div>", unsafe_allow_html=True)
+    else:
+        df = pred.copy()
+        df["prediction_time"] = pd.to_datetime(df["prediction_time"], errors="coerce")
+        df = df.dropna(subset=["prediction_time"])
+        # Prefer remaining_life series for clean signal
+        if "prediction_type" in df.columns:
+            rl = df[df["prediction_type"].astype(str).str.lower() == "remaining_life"]
+            if not rl.empty:
+                df = rl
+
+        chart = (
+            alt.Chart(df)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X("prediction_time:T", title="Time",
+                        axis=alt.Axis(labelColor=axis_color, titleColor=axis_color)),
+                y=alt.Y("confidence:Q", title="Confidence",
+                        axis=alt.Axis(labelColor=axis_color, titleColor=axis_color),
+                        scale=alt.Scale(domain=[0, 1])),
+                tooltip=[
+                    alt.Tooltip("prediction_time:T", title="Time"),
+                    alt.Tooltip("component_id:Q", title="Component ID"),
+                    alt.Tooltip("confidence:Q", title="Confidence", format=".0%"),
+                ],
+            )
+            .properties(height=280)
+            .configure_view(strokeOpacity=0)
+            .configure_axis(gridOpacity=grid_op)
+        )
+        st.altair_chart(chart, use_container_width=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with cR:
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("<div class='kpiTitle'>Prediction mix</div>", unsafe_allow_html=True)
+
+    if pred.empty or "prediction_type" not in pred.columns:
+        st.markdown("<div class='kpiSub'>Not available.</div>", unsafe_allow_html=True)
+    else:
+        mix = pred["prediction_type"].astype(str).str.lower().value_counts().reset_index()
+        mix.columns = ["type", "count"]
+
+        bar = (
+            alt.Chart(mix)
+            .mark_bar()
+            .encode(
+                x=alt.X("type:N", title="Type",
+                        axis=alt.Axis(labelColor=axis_color, titleColor=axis_color)),
+                y=alt.Y("count:Q", title="Count",
+                        axis=alt.Axis(labelColor=axis_color, titleColor=axis_color)),
+                tooltip=[alt.Tooltip("type:N", title="Type"), alt.Tooltip("count:Q", title="Count")],
+            )
+            .properties(height=280)
+            .configure_view(strokeOpacity=0)
+            .configure_axis(gridOpacity=grid_op)
+        )
+        st.altair_chart(bar, use_container_width=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ----------------------------
+# AUDIT TABLE
+# ----------------------------
+st.markdown("<div class='card'>", unsafe_allow_html=True)
+st.markdown("<div class='kpiTitle'>Recent predictions (audit)</div>", unsafe_allow_html=True)
+
+if pred.empty:
+    st.markdown("<div class='kpiSub'>No recent predictions available for this model.</div>", unsafe_allow_html=True)
+else:
+    comp_map = get_components_map()
+    show = pred.copy()
+
+    if not comp_map.empty:
+        show = show.merge(comp_map, on="component_id", how="left")
+        show["component"] = show.apply(
+            lambda r: f"{r.get('tail_number','—')} • {r.get('type','—')} • {r.get('name','—')} #{int(r['component_id'])}",
+            axis=1,
+        )
+    else:
+        show["component"] = show["component_id"].astype(str)
+
+    keep = ["prediction_time", "component", "prediction_type", "predicted_value", "confidence", "time_horizon"]
+    keep = [c for c in keep if c in show.columns]
+    show = show[keep].head(80)
+
+    if "confidence" in show.columns:
+        show["confidence"] = pd.to_numeric(show["confidence"], errors="coerce").apply(lambda x: f"{x*100:.0f}%" if pd.notna(x) else "—")
+    if "predicted_value" in show.columns:
+        show["predicted_value"] = pd.to_numeric(show["predicted_value"], errors="coerce").apply(lambda x: f"{x:.1f}" if pd.notna(x) else "—")
+
+    st.dataframe(show, use_container_width=True, hide_index=True)
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ----------------------------
+# JSON VALIDATOR (kept, but clean)
+# ----------------------------
+st.markdown("<div class='card'>", unsafe_allow_html=True)
+st.markdown("<div class='kpiTitle'>Validate metrics JSON</div>", unsafe_allow_html=True)
+st.markdown("<div class='kpiSub'>Required: precision, recall, accuracy, f1_score.</div>", unsafe_allow_html=True)
+
+user_json = st.text_area(" ", height=160, label_visibility="collapsed")
+
+col1, col2 = st.columns([1, 6])
+with col1:
+    validate_btn = st.button("Validate")
+
+if validate_btn:
+    if validate_metrics(user_json):
+        st.success("Valid metrics JSON.")
+    else:
+        st.error("Missing required fields: precision, recall, accuracy, f1_score.")
+
+st.markdown("</div>", unsafe_allow_html=True)
