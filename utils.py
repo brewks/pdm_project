@@ -94,10 +94,11 @@ def inject_global_styles(dark_mode: bool):
           .stApp {{
             background: radial-gradient(1200px 600px at 20% 0%, var(--bg2), var(--bg));
             color: var(--text);
-            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+            font-family: ui-sans-serif, system-ui, -apple-system,
+                         Segoe UI, Roboto, Helvetica, Arial;
           }}
 
-          /* Wider canvas */
+          /* Layout */
           .block-container {{
             padding-top: 1.0rem;
             padding-bottom: 1.6rem;
@@ -116,11 +117,11 @@ def inject_global_styles(dark_mode: bool):
             border-right: {sidebar_border};
           }}
 
-          /* Force sidebar text readable in light mode too */
           section[data-testid="stSidebar"] * {{
             color: var(--text) !important;
             opacity: 1 !important;
           }}
+
           section[data-testid="stSidebar"] .stCaption,
           section[data-testid="stSidebar"] small,
           section[data-testid="stSidebar"] label {{
@@ -146,7 +147,6 @@ def inject_global_styles(dark_mode: bool):
           .kpiValue {{
             font-size: 1.70rem;
             font-weight: 850;
-            color: var(--text);
           }}
 
           .kpiSub {{
@@ -164,16 +164,47 @@ def inject_global_styles(dark_mode: bool):
             color: white;
           }}
 
-          /* Inputs */
+          /* --------------------------------
+             iOS-LIKE SELECT / INPUT CONTROLS
+             -------------------------------- */
           [data-baseweb="select"] > div {{
-            border-radius: 12px !important;
+            border-radius: 14px !important;
             background: var(--input) !important;
-            border: 1px solid var(--border) !important;
+            border: 1px solid rgba(120,120,140,0.28) !important;
+            min-height: 44px !important;   /* iOS touch target */
+            padding-left: 10px !important;
+            padding-right: 10px !important;
+            box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
           }}
+
+          [data-baseweb="select"] span,
+          [data-baseweb="select"] div {{
+            font-size: 16px !important;
+          }}
+
+          ul[role="listbox"] {{
+            border-radius: 14px !important;
+            border: 1px solid rgba(120,120,140,0.22) !important;
+            background: var(--panel) !important;
+            overflow: hidden !important;
+            box-shadow: var(--shadow) !important;
+          }}
+
+          ul[role="listbox"] li {{
+            font-size: 16px !important;
+            padding-top: 10px !important;
+            padding-bottom: 10px !important;
+          }}
+
+          ul[role="listbox"] li:hover {{
+            background: rgba(90,162,255,0.12) !important;
+          }}
+
           [data-baseweb="input"] > div {{
-            border-radius: 12px !important;
+            border-radius: 14px !important;
             background: var(--input) !important;
-            border: 1px solid var(--border) !important;
+            border: 1px solid rgba(120,120,140,0.28) !important;
+            min-height: 44px !important;
           }}
 
           /* Buttons */
@@ -185,6 +216,7 @@ def inject_global_styles(dark_mode: bool):
             background: var(--accent);
             color: white;
           }}
+
           .stButton > button:hover {{
             filter: brightness(0.96);
           }}
