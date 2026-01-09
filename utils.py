@@ -252,3 +252,21 @@ def inject_global_styles(dark_mode: bool):
         """,
         unsafe_allow_html=True,
     )
+
+
+    def kpi_card(title: str, value: str, sub: str = "") -> str:
+        """Returns KPI card HTML (use with st.markdown(..., unsafe_allow_html=True))."""
+        sub_html = f"<div class='kpiSub'>{sub}</div>" if sub else ""
+        return f"""
+        <div class="card kpi">
+          <div class="kpiTitle">{title}</div>
+          <div class="kpiValue">{value}</div>
+          {sub_html}
+        </div>
+
+    def altair_axis_colors(dark_mode: bool):
+        """Central axis/grid styling for Altair charts."""
+        axis_color = "#A8B3C7" if dark_mode else "#334155"
+        grid_opacity = 0.15 if dark_mode else 0.25
+        return axis_color, grid_opacity
+
