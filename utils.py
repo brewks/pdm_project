@@ -50,6 +50,10 @@ def inject_global_styles(dark_mode: bool):
     """
     ONE source of truth for your UI theme.
     Call this once per page after you know dark_mode.
+
+    IMPORTANT for multipage apps:
+    - Do NOT fully hide Streamlit header/toolbar, because the sidebar toggle lives there.
+    - Instead we keep it visible but subtle, so the sidebar never becomes "unreachable".
     """
     if dark_mode:
         bg = "#0B1220"
@@ -107,9 +111,34 @@ def inject_global_styles(dark_mode: bool):
             padding-right: 2.0rem;
           }}
 
-          [data-testid="stToolbar"] {{ visibility: hidden; height: 0; }}
+          /* Footer can be hidden safely */
           footer {{ visibility: hidden; }}
-          header {{ visibility: hidden; }}
+
+          /* --------------------------------
+             KEEP HEADER/TOOLBAR (sidebar toggle lives here)
+             -------------------------------- */
+          [data-testid="stHeader"] {{
+            background: transparent !important;
+          }}
+          header {{
+            visibility: visible !important;
+          }}
+
+          /* Make toolbar unobtrusive instead of hidden */
+          [data-testid="stToolbar"] {{
+            visibility: visible !important;
+            height: auto !important;
+            opacity: 0.12;
+            transition: opacity 0.15s ease;
+          }}
+          [data-testid="stToolbar"]:hover {{
+            opacity: 1;
+          }}
+
+          /* Optional: remove thin top decoration line */
+          [data-testid="stDecoration"] {{
+            display: none !important;
+          }}
 
           /* Sidebar */
           section[data-testid="stSidebar"] {{
@@ -117,11 +146,11 @@ def inject_global_styles(dark_mode: bool):
             border-right: {sidebar_border};
           }}
 
+          /* Force sidebar text readable in light mode too */
           section[data-testid="stSidebar"] * {{
             color: var(--text) !important;
             opacity: 1 !important;
           }}
-
           section[data-testid="stSidebar"] .stCaption,
           section[data-testid="stSidebar"] small,
           section[data-testid="stSidebar"] label {{
@@ -216,7 +245,6 @@ def inject_global_styles(dark_mode: bool):
             background: var(--accent);
             color: white;
           }}
-
           .stButton > button:hover {{
             filter: brightness(0.96);
           }}
